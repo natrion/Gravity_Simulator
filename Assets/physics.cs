@@ -35,9 +35,13 @@ public class physics : MonoBehaviour
         //drawing meshes
         Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, Poslen);
     }
-    void Update()
+    private void Start()
     {
         spawnPoints();
+    }
+    void Update()
+    {
+        
         visualizatePositions();
     }
 }
