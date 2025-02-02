@@ -10,10 +10,10 @@ public class physics : MonoBehaviour
     void spawnPoints()
     {
         positions = new List<Vector3>();
-        float totalSpaceRadius = Mathf.Pow((SpacePerAmount * spawnAmount) / ((4 / 3) * Mathf.PI), 1f / 3f);
+        float totalSpaceRadius = Mathf.Pow((SpacePerAmount * spawnAmount) / ((4f / 3f) * Mathf.PI), 1f / 3f);
         for (int i = 0; i < spawnAmount; i++)
         {
-            Vector3 cubeRange = new Vector3(Random.Range(-1, 1), Random.Range(-1, 1), Random.Range(-1, 1));
+            Vector3 cubeRange = new Vector3(Random.Range(-1f, 1f), Random.Range(-1f, 1f), Random.Range(-1f, 1f));
             positions.Add(cubeRange.normalized * Random.Range(0, totalSpaceRadius));
         }
     }
@@ -37,11 +37,11 @@ public class physics : MonoBehaviour
     }
     private void Start()
     {
-        spawnPoints();
+        
     }
     void Update()
     {
-        
+        spawnPoints();
         visualizatePositions();
     }
 }
