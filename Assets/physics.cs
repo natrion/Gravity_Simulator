@@ -19,7 +19,7 @@ public class physics : MonoBehaviour
         float totalSpaceRadius = Mathf.Pow((SpacePerAmount * spawnAmount) / ((4f / 3f) * Mathf.PI), 1f / 3f);
         for (int i = 0; i < spawnAmount; i++)
         {
-            positions.Add(Random.onUnitSphere * Random.RandomRange(0f, totalSpaceRadius));
+            positions.Add(Random.onUnitSphere * Mathf.Pow( Random.RandomRange(0f, 1f),1f/3f) * totalSpaceRadius);
         }
     }
     public Mesh pointMesh;
