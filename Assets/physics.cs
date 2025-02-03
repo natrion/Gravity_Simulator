@@ -4,13 +4,14 @@ using UnityEngine;
 
 public class physics : MonoBehaviour
 {
+    public ComputeShader physicsCom;
     Vector3 EulerToNormal(Vector3 eulerAngles)
     {
         Quaternion rotation = Quaternion.Euler(eulerAngles); // Euler na Quaternion
         return rotation * Vector3.forward; // Aplikujeme rotáciu na vektor (0,0,1)
     }
 
-    private List<Vector3> positions;
+    public  List<Vector3> positions;
     public int spawnAmount = 20;
     public float SpacePerAmount = 1;
     void spawnPoints()
@@ -27,10 +28,12 @@ public class physics : MonoBehaviour
     public float pointSize = 0.1f;
     void visualizatePositions()
     {
+        /*
         //inicializating variables
         Matrix4x4[] pointsTRS = new Matrix4x4[positions.Count];
         int Poslen = pointsTRS.Length;
         Quaternion pointRot = Quaternion.EulerRotation(Vector3.zero);
+        print(pointRot.x+ " "+ pointRot.y+ " "+ pointRot.z+" "+ pointRot.w);
         Vector3 pointSizeVector = Vector3.one * pointSize;
         //converting to positions Metrix
         for (int i = 0; i < pointsTRS.Length; i++)
@@ -40,13 +43,41 @@ public class physics : MonoBehaviour
         }
         //drawing meshes
         Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, Poslen);
+        */
+        //declearing buffers
+        int positionsNum = positions.Count;
+        ComputeBuffer inPositionsBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 3);
+        inPositionsBuffer.SetData(positions);
+        ComputeBuffer outPositionsBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 3);
+        int mainKernel = physicsCom.FindKernel("CSMain");
+        ComputeBuffer outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float)*16);
+
+        //seting buffers to shader
+        physicsCom.SetBuffer(mainKernel, "positionsIn", inPositionsBuffer);
+        physicsCom.SetBuffer(mainKernel, "positionsOut", outPositionsBuffer);
+        physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
+        //dispatch
+        physicsCom.SetFloat("size", pointSize);
+
+        //taking data from dispach
+        physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 64f), 1, 1);
+        posOut = new Vector3[positionsNum];
+        outPositionsBuffer.GetData(posOut);
+
+        Matrix4x4[] pointsTRS = new Matrix4x4[positionsNum];
+        outMetrixTransformBuffer.GetData(pointsTRS);
+
+        //drawing meshes
+        Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, positionsNum);
     }
+    public Vector3[] posOut;
     private void Start()
     {
-        spawnPoints();
+   
     }
     void Update()
-    { 
+    {
+        spawnPoints();
         visualizatePositions();
     }
 }
