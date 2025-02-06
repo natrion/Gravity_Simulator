@@ -44,13 +44,36 @@ float4x4 CreateTRSMatrix(float3 pos, float4 rot, float3 scale)
     // Combine Translation, Rotation, and Scaling Matrices (TRS)
     return mul(translationMatrix, mul(rotationMatrix, scaleMatrix));
 }
+float frameLenght;
+float GStrenght;
 float size;
+float pointMass;
 [numthreads(64,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
-    if (id.x < positionsIn.Length)
+    if (id.x < positionsIn.Length)//checks if this is still part od the distances
     {
-        positionsOut[id.x] = positionsIn[id.x];
-        MetrixTransforms[id.x] = CreateTRSMatrix(positionsIn[id.x], float4(0, 0, 0, 1), float3(1, 1, 1) * size);
+        float3 mainPos = positionsIn[id.x];//gets the position that the thred is checking
+
+        float3 changedPosition = mainPos;
+        
+        for (int i = 0; i < positionsIn.Length; i++)
+        {
+            if (i != id.x)
+            {
+                float3 testPos = positionsIn[i];//testing this position
+
+                //geting values for calculating gravity
+                float3 dirTestPos = normalize(testPos - mainPos);
+                float disTestPos = distance(mainPos, testPos);
+                //calculating gravity
+                float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
+                float disTochange = frameLenght * gravityForce;
+                changedPosition += disTochange * dirTestPos;
+            }
+        }
+        MetrixTransforms[id.x] = CreateTRSMatrix(changedPosition, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
+        positionsOut[id.x] = changedPosition;
+
     }
 }
