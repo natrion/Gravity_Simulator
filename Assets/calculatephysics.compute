@@ -73,7 +73,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 float disTestPos = distance(mainPos, testPos);
                 //calculating gravity
                 float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
-                changedPoint.velocity += gravityForce;        
+                changedPoint.velocity += gravityForce* dirTestPos;
             }
         }
 

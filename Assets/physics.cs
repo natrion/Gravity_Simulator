@@ -27,7 +27,7 @@ public class physics : MonoBehaviour
         {
             Particle newpoint = new Particle();
             newpoint.position = Random.onUnitSphere * Mathf.Pow(Random.RandomRange(0f, 1f), 1f / 3f) * totalSpaceRadius;
-            newpoint.velocity = Vector3.zero;
+            newpoint.velocity = Random.onUnitSphere * Random.RandomRange(0, 0.2f);
             points[i] = newpoint;
         }
     }
