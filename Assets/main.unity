@@ -153,13 +153,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   physicsCom: {fileID: 7200000, guid: 385bea974c5300e4fa24e86e52b5d849, type: 3}
-  positions: []
   spawnAmount: 400
   SpacePerAmount: 1
   pointMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   pointMaterial: {fileID: 2100000, guid: c3de0fc030849674abc4131995ee2c53, type: 2}
   pointSize: 0.1
-  posOut: []
+  pointMass: 1
+  GStrenght: 0.001
 --- !u!4 &799219747
 Transform:
   m_ObjectHideFlags: 0

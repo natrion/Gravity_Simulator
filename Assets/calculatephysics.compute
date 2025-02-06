@@ -1,9 +1,14 @@
 #pragma kernel CSMain
 
+struct Particle
+{
+    float3 position;
+    float3 velocity;
+};
 
-RWStructuredBuffer<float3> positionsIn;
+RWStructuredBuffer<Particle> pointsIn;
+RWStructuredBuffer<Particle> pointsOut;
 RWStructuredBuffer<float4x4> MetrixTransforms;
-RWStructuredBuffer<float3> positionsOut;
 
 float4x4 CreateTRSMatrix(float3 pos, float4 rot, float3 scale)
 {
@@ -51,29 +56,32 @@ float pointMass;
 [numthreads(64,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
-    if (id.x < positionsIn.Length)//checks if this is still part od the distances
+    if (id.x < pointsIn.Length)//checks if this is still part od the distances
     {
-        float3 mainPos = positionsIn[id.x];//gets the position that the thred is checking
+        float3 mainPos = pointsIn[id.x].position;//gets the position that the thred is checking
 
-        float3 changedPosition = mainPos;
+        Particle changedPoint = pointsIn[id.x];
         
-        for (int i = 0; i < positionsIn.Length; i++)
+        for (int i = 0; i < pointsIn.Length; i++)
         {
             if (i != id.x)
             {
-                float3 testPos = positionsIn[i];//testing this position
+                float3 testPos = pointsIn[i].position;//testing this position
 
                 //geting values for calculating gravity
                 float3 dirTestPos = normalize(testPos - mainPos);
                 float disTestPos = distance(mainPos, testPos);
                 //calculating gravity
                 float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
-                float disTochange = frameLenght * gravityForce;
-                changedPosition += disTochange * dirTestPos;
+                changedPoint.velocity += gravityForce;        
             }
         }
-        MetrixTransforms[id.x] = CreateTRSMatrix(changedPosition, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
-        positionsOut[id.x] = changedPosition;
+
+        float disTochange = frameLenght * changedPoint.velocity;
+        changedPoint.position += disTochange;
+
+        MetrixTransforms[id.x] = CreateTRSMatrix(changedPoint.position, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
+        pointsOut[id.x] = changedPoint;
 
     }
 }
