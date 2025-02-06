@@ -77,6 +77,14 @@ public class physics : MonoBehaviour
     private void Start()
     {
         spawnPoints();
+        /*
+        points = new Particle[2];
+        points[0] = new Particle();
+        points[0].velocity = Vector3.right * -0.2f;
+        points[0].position = Vector3.right * 0.2f;
+        points[1] = new Particle();
+        points[1].position = Vector3.left * 0.2f;
+        points[1].velocity = Vector3.left * -0.2f;*/
     }
     void Update()
     {

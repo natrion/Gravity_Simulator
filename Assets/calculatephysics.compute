@@ -53,9 +53,11 @@ float frameLenght;
 float GStrenght;
 float size;
 float pointMass;
+
 [numthreads(64,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
+    float collisionDis = 0.1;
     if (id.x < pointsIn.Length)//checks if this is still part od the distances
     {
         float3 mainPos = pointsIn[id.x].position;//gets the position that the thred is checking
@@ -66,7 +68,8 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         {
             if (i != id.x)//only doing caculations on diferent points
             {
-                float3 testPos = pointsIn[i].position;//inicializatinf test pos
+                Particle testParticle = pointsIn[i];
+                float3 testPos = testParticle.position;//inicializatinf test pos
 
                 //geting values for calculating gravity
                 float3 dirTestPos = normalize(testPos - mainPos);
@@ -76,9 +79,15 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 changedPoint.velocity += gravityForce* dirTestPos;
 
                 //calculating colison
-                if (disTestPos<0.2) {
-                    changedPoint.velocity *= -0.9;//bouncing point back when too close with some friction
+                
+                if (disTestPos< collisionDis) {
+                    //calculating velocitiesfor colided objects
+                    float3 relVel = changedPoint.velocity - testParticle.velocity ;//rel velocity for the main paricle
+                    changedPoint.velocity = (relVel/2) * -0.7;
+                    //moving them so they are no longer in each other 
+                    changedPoint.position += dirTestPos * -(collisionDis - disTestPos );
                 }
+               
             }
         }
 
