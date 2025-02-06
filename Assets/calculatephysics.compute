@@ -64,9 +64,9 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         
         for (int i = 0; i < pointsIn.Length; i++)
         {
-            if (i != id.x)
+            if (i != id.x)//only doing caculations on diferent points
             {
-                float3 testPos = pointsIn[i].position;//testing this position
+                float3 testPos = pointsIn[i].position;//inicializatinf test pos
 
                 //geting values for calculating gravity
                 float3 dirTestPos = normalize(testPos - mainPos);
@@ -74,6 +74,11 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 //calculating gravity
                 float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
                 changedPoint.velocity += gravityForce* dirTestPos;
+
+                //calculating colison
+                if (disTestPos<0.2) {
+                    changedPoint.velocity *= -0.9;//bouncing point back when too close with some friction
+                }
             }
         }
 
