@@ -31,60 +31,70 @@ public class physics : MonoBehaviour
             points[i] = newpoint;
         }
     }
-    public Mesh pointMesh;
-    public Material pointMaterial;
-    public float pointSize = 0.1f;
-    public float pointMass = 1;
-    public float GStrenght = 1;
-
-
-    void visualizatePositions()
+    void spawnTwoPoints()
     {
-
-        //declearing buffers
-        int pointStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Particle));
-        int positionsNum = points.Length;
-        ComputeBuffer pointsInBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
-        pointsInBuffer.SetData(points);
-        ComputeBuffer pointsOutBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
-        int mainKernel = physicsCom.FindKernel("CSMain");
-        ComputeBuffer outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float)*16);
-
-        //seting buffers to shader
-        physicsCom.SetBuffer(mainKernel, "pointsIn", pointsInBuffer);
-        physicsCom.SetBuffer(mainKernel, "pointsOut", pointsOutBuffer);
-        physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
-
-        //setting data for dispach
-        physicsCom.SetFloat("size", pointSize);
-        physicsCom.SetFloat("GStrenght", GStrenght);
-        physicsCom.SetFloat("pointMass", pointMass);
-        physicsCom.SetFloat("frameLenght", Time.deltaTime);
-        //dispatch
-        physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 64f), 1, 1);
-        
-        //taking data from dispach
-        points = new Particle[positionsNum];
-        pointsOutBuffer.GetData(points);
-        pointsOutBuffer.Release();
-        Matrix4x4[] pointsTRS = new Matrix4x4[positionsNum];
-        outMetrixTransformBuffer.GetData(pointsTRS);
-        outMetrixTransformBuffer.Release();
-
-        //drawing meshes
-        Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, positionsNum);
-    }
-    private void Start()
-    {
-        spawnPoints();
-        /*
         points = new Particle[2];
         points[0] = new Particle();
         points[0].velocity = Vector3.right * -0.2f;
         points[0].position = Vector3.right * 0.2f;
         points[1] = new Particle();
         points[1].position = Vector3.left * 0.2f;
-        points[1].velocity = Vector3.left * -0.2f;*/
+        points[1].velocity = Vector3.left * -0.2f;
+    }
+    public Mesh pointMesh;
+    public Material pointMaterial;
+    public float pointSize = 0.1f;
+    public float pointMass = 1;
+    public float GStrenght = 1;
+    public int frameCal = 1;
+    public float bounceForceMul = 1;
+    void visualizatePositions()
+    {
+        for (int i = 0; i < frameCal; i++)//repeating calculatin forfaster simulation
+        {
+            //declearing buffers
+            int pointStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Particle));
+            int positionsNum = points.Length;
+            ComputeBuffer pointsInBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
+            pointsInBuffer.SetData(points);
+            ComputeBuffer pointsOutBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
+            int mainKernel = physicsCom.FindKernel("CSMain");
+            ComputeBuffer outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 16);
+
+            //seting buffers to shader
+            physicsCom.SetBuffer(mainKernel, "pointsIn", pointsInBuffer);
+            physicsCom.SetBuffer(mainKernel, "pointsOut", pointsOutBuffer);
+            physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
+
+            //setting data for dispach
+            physicsCom.SetFloat("size", pointSize);
+            physicsCom.SetFloat("GStrenght", GStrenght);
+            physicsCom.SetFloat("pointMass", pointMass);
+            physicsCom.SetFloat("frameLenght", Time.deltaTime);
+            physicsCom.SetFloat("bounceForceMul", bounceForceMul);
+            
+            //dispatch
+            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 64f), 1, 1);
+
+            //taking data from dispach
+            points = new Particle[positionsNum];
+            pointsOutBuffer.GetData(points);
+            pointsOutBuffer.Release();
+            Matrix4x4[] pointsTRS = new Matrix4x4[positionsNum];
+            outMetrixTransformBuffer.GetData(pointsTRS);
+            outMetrixTransformBuffer.Release();
+            //drawing meshes
+
+            if (i == frameCal-1) Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, positionsNum);
+        }
+
+        
+    }
+    private void Start()
+    {
+        //spawnPoints();
+        spawnTwoPoints();
+        
     }
     void Update()
     {

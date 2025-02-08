@@ -53,7 +53,7 @@ float frameLenght;
 float GStrenght;
 float size;
 float pointMass;
-
+float bounceForceMul = 1;//pauli repulsion force multipleyer
 [numthreads(64,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
@@ -68,26 +68,36 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         {
             if (i != id.x)//only doing caculations on diferent points
             {
+                
+
                 Particle testParticle = pointsIn[i];
                 float3 testPos = testParticle.position;//inicializatinf test pos
 
                 //geting values for calculating gravity
                 float3 dirTestPos = normalize(testPos - mainPos);
                 float disTestPos = distance(mainPos, testPos);
+                /*
+                if (disTestPos < size)
+                {
+                    float3 samplingStartpos = (size - disTestPos )pointsIn[id.x].position - pointsIn[id.x].velocoty;
+                    float3 pastvelocity = pointsIn[id.x].velocoty;
+                    for (int i = 0; i < 5; i++)
+                    {
+                        float bounceForce = bounceForceMul / pow(disTestPos / size, 12);
+                        samplingStartpos += bounceForce * (dirTestPos * -1);
+                        changedVel += bounceForce * (dirTestPos * -1);
+                        pastvelocity
+                    }
+
+                }*/
+
                 //calculating gravity
                 float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
-                changedPoint.velocity += gravityForce* dirTestPos;
+                changedPoint.velocity += gravityForce * dirTestPos;
 
-                //calculating colison
-                
-                if (disTestPos< collisionDis) {
-                    //calculating velocitiesfor colided objects
-                    float3 relVel = changedPoint.velocity - testParticle.velocity ;//rel velocity for the main paricle
-                    changedPoint.velocity = (relVel/2) * -0.7;
-                    //moving them so they are no longer in each other 
-                    changedPoint.position += dirTestPos * -(collisionDis - disTestPos );
-                }
-               
+                //calculating bounce force from samples
+                float bounceForce = bounceForceMul / pow(disTestPos / size, 12);
+                changedPoint.velocity += bounceForce * (dirTestPos * -1);
             }
         }
 
