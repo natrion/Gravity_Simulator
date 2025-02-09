@@ -10,6 +10,24 @@ RWStructuredBuffer<Particle> pointsIn;
 RWStructuredBuffer<Particle> pointsOut;
 RWStructuredBuffer<float4x4> MetrixTransforms;
 
+bool NormalHitsSphere(float3 normal, float3 origin, float3 spherePos, float sphereRadius, out float3 hitPos) {
+    float3 L = spherePos - origin;   // Vector from ray origin to sphere center
+    float tca = dot(L, normal);      // Projection of L onto the normal (ray)
+    float d2 = dot(L, L) - tca * tca; // Perpendicular distance squared
+
+    float r2 = sphereRadius * sphereRadius;
+    if (d2 > r2) return false; // No hit, normal misses the sphere
+
+    float thc = sqrt(r2 - d2); // Distance from tca to intersection points
+    float t = tca - thc; // Closest intersection point along the normal
+
+    if (t < 0) return false; // Sphere is behind the origin, no hit
+
+    hitPos = origin + normal * t; // Compute the intersection position
+    return true;
+}
+
+
 float4x4 CreateTRSMatrix(float3 pos, float4 rot, float3 scale)
 {
     // Create Rotation Matrix from Quaternion (rot: float4)
@@ -54,12 +72,16 @@ float GStrenght;
 float size;
 float pointMass;
 float bounceForceMul = 1;//pauli repulsion force multipleyer
+#define MAX_POINTS 20
 [numthreads(64,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
     float collisionDis = 0.1;
     if (id.x < pointsIn.Length)//checks if this is still part od the distances
     {
+        int colidedPoints[MAX_POINTS]; //array of points that are colided with this point
+        int colidedPointsLenght = 0;
+
         float3 mainPos = pointsIn[id.x].position;//gets the position that the thred is checking
 
         Particle changedPoint = pointsIn[id.x];
@@ -73,36 +95,54 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 Particle testParticle = pointsIn[i];
                 float3 testPos = testParticle.position;//inicializatinf test pos
 
-                //geting values for calculating gravity
+                //geting values for calculating 
                 float3 dirTestPos = normalize(testPos - mainPos);
                 float disTestPos = distance(mainPos, testPos);
-                /*
-                if (disTestPos < size)
-                {
-                    float3 samplingStartpos = (size - disTestPos )pointsIn[id.x].position - pointsIn[id.x].velocoty;
-                    float3 pastvelocity = pointsIn[id.x].velocoty;
-                    for (int i = 0; i < 5; i++)
-                    {
-                        float bounceForce = bounceForceMul / pow(disTestPos / size, 12);
-                        samplingStartpos += bounceForce * (dirTestPos * -1);
-                        changedVel += bounceForce * (dirTestPos * -1);
-                        pastvelocity
-                    }
-
-                }*/
-
                 //calculating gravity
                 float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
                 changedPoint.velocity += gravityForce * dirTestPos;
-
+                                                          
                 //calculating bounce force from samples
                 float bounceForce = bounceForceMul / pow(disTestPos / size, 12);
                 changedPoint.velocity += bounceForce * (dirTestPos * -1);
+                if (size*2 > disTestPos)
+                {
+                    if (colidedPointsLenght < MAX_POINTS)
+                    {
+                        colidedPoints[colidedPointsLenght] = i;
+                        colidedPointsLenght++;
+                    }      
+                }
             }
         }
+        float samples = 4;
+        if (colidedPointsLenght != 0)
+        {
 
-        float3 disTochange = frameLenght * changedPoint.velocity;
-        changedPoint.position += disTochange;
+            for (int i = 0; i < colidedPointsLenght; i++)
+            {
+                Particle colidedParticle = pointsIn[colidedPoints[i]];
+                for (int o = 0; o < samples; o++)
+                {
+
+                    float3 dis = distance(colidedParticle.position, changedPoint.position);
+                    float3 dir = normalize(changedPoint.position - colidedParticle.position);
+
+                    float bounceForce = bounceForceMul / pow(dis / size, 12);
+                    changedPoint.velocity += bounceForce * dir;
+
+                    float3 disTochange = (frameLenght * changedPoint.velocity) / samples;
+                    changedPoint.position += disTochange;
+
+                }
+            }
+        }
+        else {
+            float3 disTochange = frameLenght * changedPoint.velocity;
+            changedPoint.position += disTochange;
+        }
+       
+        
 
         MetrixTransforms[id.x] = CreateTRSMatrix(changedPoint.position, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
         pointsOut[id.x] = changedPoint;

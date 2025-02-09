@@ -153,7 +153,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   physicsCom: {fileID: 7200000, guid: 385bea974c5300e4fa24e86e52b5d849, type: 3}
-  spawnAmount: 2
+  spawnAmount: 3
   SpacePerAmount: 0.5
   pointMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   pointMaterial: {fileID: 2100000, guid: c3de0fc030849674abc4131995ee2c53, type: 2}
@@ -161,7 +161,7 @@ MonoBehaviour:
   pointMass: 0.01
   GStrenght: 0.1
   frameCal: 1
-  bounceForceMul: 2
+  bounceForceMul: 0.26
 --- !u!4 &799219747
 Transform:
   m_ObjectHideFlags: 0
