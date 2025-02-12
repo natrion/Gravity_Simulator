@@ -71,27 +71,27 @@ float frameLenght;
 float GStrenght;
 float size;
 float pointMass;
-float bounceForceMul = 1;//pauli repulsion force multipleyer
+float bounceForceMul = 1;//bounce force multipleyer
+float bindForceMul = 1;//bind force multipleyer
 #define MAX_POINTS 20
-[numthreads(64,1,1)]
+[numthreads(128,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
     float collisionDis = 0.1;
     if (id.x < pointsIn.Length)//checks if this is still part od the distances
     {
-        int colidedPoints[MAX_POINTS]; //array of points that are colided with this point
-        int colidedPointsLenght = 0;
+        int colidedPoints[MAX_POINTS]; //array of points that are close to main point
+        int colidedPointsLenght = 0;// lenght of colidedPoints
 
         float3 mainPos = pointsIn[id.x].position;//gets the position that the thred is checking
 
         Particle changedPoint = pointsIn[id.x];
         
+        //going thrue all points to calculate forces
         for (int i = 0; i < pointsIn.Length; i++)
         {
             if (i != id.x)//only doing caculations on diferent points
-            {
-                
-
+            {               
                 Particle testParticle = pointsIn[i];
                 float3 testPos = testParticle.position;//inicializatinf test pos
 
@@ -101,10 +101,8 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 //calculating gravity
                 float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
                 changedPoint.velocity += gravityForce * dirTestPos;
-                                                          
-                //calculating bounce force from samples
-                float bounceForce = bounceForceMul / pow(disTestPos / size, 12);
-                changedPoint.velocity += bounceForce * (dirTestPos * -1);
+            
+               //adding points to all points that are clsoe to main point 
                 if (size*2 > disTestPos)
                 {
                     if (colidedPointsLenght < MAX_POINTS)
@@ -115,35 +113,40 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 }
             }
         }
-        float samples = 4;
+
+        float samples = 5;
+        //goint thrue all points that are close if there are some
         if (colidedPointsLenght != 0)
         {
 
             for (int i = 0; i < colidedPointsLenght; i++)
             {
                 Particle colidedParticle = pointsIn[colidedPoints[i]];
+                //sampling multiple positions
                 for (int o = 0; o < samples; o++)
                 {
-
+                    //geting values for calculating 
                     float3 dis = distance(colidedParticle.position, changedPoint.position);
                     float3 dir = normalize(changedPoint.position - colidedParticle.position);
-
-                    float bounceForce = bounceForceMul / pow(dis / size, 12);
+                    //calculating bounce force
+                    float bounceForce = bounceForceMul / pow(dis / (size*0.8), 12);
                     changedPoint.velocity += bounceForce * dir;
-
+                    //calculating bind force
+                    float bindForceStrenght = min(1, pow(max(0, 1/(dis - size * 0.8)),2)* bindForceMul); //min(pow(DisRevertedToOne, 1)/ samples,1);
+                    changedPoint.velocity = lerp( changedPoint.velocity, colidedParticle.velocity, bindForceStrenght/2);
+                    //apling all close forces
                     float3 disTochange = (frameLenght * changedPoint.velocity) / samples;
                     changedPoint.position += disTochange;
-
                 }
             }
         }
         else {
+            //caculating velociti for points that are not close together
             float3 disTochange = frameLenght * changedPoint.velocity;
             changedPoint.position += disTochange;
         }
-       
-        
-
+            
+        //apling buffers
         MetrixTransforms[id.x] = CreateTRSMatrix(changedPoint.position, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
         pointsOut[id.x] = changedPoint;
 

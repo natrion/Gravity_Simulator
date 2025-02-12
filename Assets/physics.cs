@@ -8,6 +8,7 @@ public class physics : MonoBehaviour
     {
         public Vector3 position;
         public Vector3 velocity;
+        
     }
     public ComputeShader physicsCom;
     Vector3 EulerToNormal(Vector3 eulerAngles)
@@ -27,7 +28,7 @@ public class physics : MonoBehaviour
         {
             Particle newpoint = new Particle();
             newpoint.position = Random.onUnitSphere * Mathf.Pow(Random.RandomRange(0f, 1f), 1f / 3f) * totalSpaceRadius;
-            newpoint.velocity = Random.onUnitSphere * Random.RandomRange(0, 0.2f);
+            newpoint.velocity = Random.onUnitSphere * Random.RandomRange(0, 1f);
             points[i] = newpoint;
         }
     }
@@ -35,11 +36,11 @@ public class physics : MonoBehaviour
     {
         points = new Particle[2];
         points[0] = new Particle();
-        points[0].velocity = Vector3.right * -0.2f;
+        points[0].velocity = Vector3.right * -0.01f;
         points[0].position = Vector3.right * 0.5f;
         points[1] = new Particle();
         points[1].position = Vector3.left * 0.5f;
-        points[1].velocity = Vector3.left * -0.2f;
+        points[1].velocity = Vector3.left * -0.01f;
     }
     public Mesh pointMesh;
     public Material pointMaterial;
@@ -48,6 +49,7 @@ public class physics : MonoBehaviour
     public float GStrenght = 1;
     public int frameCal = 1;
     public float bounceForceMul = 1;
+    public float bindForceMul = 1;
     void visualizatePositions()
     {
         for (int i = 0; i < frameCal; i++)//repeating calculatin forfaster simulation
@@ -72,6 +74,7 @@ public class physics : MonoBehaviour
             physicsCom.SetFloat("pointMass", pointMass);
             physicsCom.SetFloat("frameLenght", Time.deltaTime);
             physicsCom.SetFloat("bounceForceMul", bounceForceMul);
+            physicsCom.SetFloat("bindForceMul", bindForceMul);
             
             //dispatch
             physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 64f), 1, 1);
