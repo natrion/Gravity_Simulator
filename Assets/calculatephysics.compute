@@ -94,14 +94,9 @@ void CSMain (uint3 id : SV_DispatchThreadID)
             {               
                 Particle testParticle = pointsIn[i];
                 float3 testPos = testParticle.position;//inicializatinf test pos
-
                 //geting values for calculating 
                 float3 dirTestPos = normalize(testPos - mainPos);
-                float disTestPos = distance(mainPos, testPos);
-                //calculating gravity
-                float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
-                changedPoint.velocity += gravityForce * dirTestPos;
-            
+                float disTestPos = distance(mainPos, testPos);                        
                //adding points to all points that are clsoe to main point 
                 if (size*2 > disTestPos)
                 {
@@ -110,6 +105,11 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                         colidedPoints[colidedPointsLenght] = i;
                         colidedPointsLenght++;
                     }      
+                }
+                else {                   
+                    //calculating gravity
+                    float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
+                    changedPoint.velocity += gravityForce * dirTestPos;                    
                 }
             }
         }
@@ -133,7 +133,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                     changedPoint.velocity += bounceForce * dir;
                     //calculating bind force
                     float bindForceStrenght = min(1, pow(max(0, 1/(dis - size * 0.8)),2)* bindForceMul); //min(pow(DisRevertedToOne, 1)/ samples,1);
-                    changedPoint.velocity = lerp( changedPoint.velocity, colidedParticle.velocity, bindForceStrenght/2);
+                    changedPoint.velocity += (colidedParticle.velocity- changedPoint.velocity)*(bindForceStrenght/2);
                     //apling all close forces
                     float3 disTochange = (frameLenght * changedPoint.velocity) / samples;
                     changedPoint.position += disTochange;

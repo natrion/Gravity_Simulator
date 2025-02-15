@@ -4,32 +4,86 @@ using UnityEngine;
 
 public class physics : MonoBehaviour
 {
+    [Header("Basic Setup")]
+    [SerializeField] private ComputeShader physicsCom;
+    [SerializeField] private Mesh pointMesh;
+    [SerializeField] private Material pointMaterial;
+    [Header("Spawning Points Sphere")]
+    [SerializeField] private bool spawnSpehere;
+    [SerializeField] private int spawnAmount = 20;
+    [SerializeField] private float SpacePerAmount = 1;
+    [Header("Spawning Points Perlin Cube")]
+    [SerializeField] private bool spawnPerCube;
+    [SerializeField] private float perlinFreqency = 0.5f;
+    [SerializeField] private float perlinCubeLenghtPerPoint = 2;
+    [SerializeField] private int sideNum = 30;
+    [Header("Spawning Other")]
+    [SerializeField] private bool Spawn2Points;
+    [Header("physics")]
+    [SerializeField] private float pointSize = 0.1f;
+    [SerializeField] private float pointMass = 1;
+    [SerializeField] private float GStrenght = 1;
+    [SerializeField] private int frameCal = 1;
+    [SerializeField] private float bounceForceMul = 1;
+    [SerializeField] private float bindForceMul = 1;
     struct Particle
     {
         public Vector3 position;
         public Vector3 velocity;
         
     }
-    public ComputeShader physicsCom;
+    
     Vector3 EulerToNormal(Vector3 eulerAngles)
     {
         Quaternion rotation = Quaternion.Euler(eulerAngles); // Euler na Quaternion
         return rotation * Vector3.forward; // Aplikujeme rotáciu na vektor (0,0,1)
     }
-
-    private Particle[] points;
-    public int spawnAmount = 20;
-    public float SpacePerAmount = 1;
-    void spawnPoints()
+    
+    void spawnPointsSpere()
     {
+
         points = new Particle[spawnAmount];
         float totalSpaceRadius = Mathf.Pow((SpacePerAmount * spawnAmount) / ((4f / 3f) * Mathf.PI), 1f / 3f);
         for (int i = 0; i < spawnAmount; i++)
         {
+            Vector3 pos = Random.onUnitSphere * Mathf.Pow(Random.RandomRange(0f, 1f), 1f / 3f) * totalSpaceRadius;           
+                    
             Particle newpoint = new Particle();
-            newpoint.position = Random.onUnitSphere * Mathf.Pow(Random.RandomRange(0f, 1f), 1f / 3f) * totalSpaceRadius;
+            newpoint.position = pos;
             newpoint.velocity = Random.onUnitSphere * Random.RandomRange(0, 1f);
-            points[i] = newpoint;
+            points[i ] = newpoint;                            
+
+        }
+    }
+    
+    void SpawnPelinCube ()
+    {
+        List<Particle> pointsList = new List<Particle>();
+        float sideLenght = perlinCubeLenghtPerPoint * (float)sideNum;
+        Vector3 seed = new Vector3(Random.RandomRange(-10000, 10000), Random.RandomRange(-10000, 10000), Random.RandomRange(-10000, 10000));
+        for (float x = 0; x < sideLenght; x+= perlinCubeLenghtPerPoint)
+        {
+            for (float y = 0; y < sideLenght; y+= perlinCubeLenghtPerPoint)
+            {
+                for (float z = 0; z < sideLenght; z+= perlinCubeLenghtPerPoint)
+                {
+                    Vector3 pos = new Vector3(x, y, z);
+                    float perNum = perlinNoise.get3DPerlinNoise(pos+ seed, perlinFreqency);
+                    if (perNum>0.5)
+                    {
+                        Particle newpoint = new Particle();
+                        float maxPosVar = Mathf.Max(0, perlinCubeLenghtPerPoint - pointSize);
+                        newpoint.position = pos+ new Vector3(Random.RandomRange(-maxPosVar, maxPosVar), Random.RandomRange(-maxPosVar, maxPosVar), Random.RandomRange(-maxPosVar, maxPosVar));
+                        newpoint.velocity = Random.onUnitSphere * Random.RandomRange(0, 1f);
+                        pointsList.Add(newpoint);
+                    }
+                }
+            }
+        }
+        points = new Particle[pointsList.Count];
+        for (int i = 0; i < pointsList.Count; i++)
+        {
+            points[i] = pointsList[i];
         }
     }
     void spawnTwoPoints()
@@ -42,14 +96,8 @@ public class physics : MonoBehaviour
         points[1].position = Vector3.left * 0.5f;
         points[1].velocity = Vector3.left * -0.01f;
     }
-    public Mesh pointMesh;
-    public Material pointMaterial;
-    public float pointSize = 0.1f;
-    public float pointMass = 1;
-    public float GStrenght = 1;
-    public int frameCal = 1;
-    public float bounceForceMul = 1;
-    public float bindForceMul = 1;
+    private Particle[] points;
+
     void visualizatePositions()
     {
         for (int i = 0; i < frameCal; i++)//repeating calculatin forfaster simulation
@@ -93,14 +141,18 @@ public class physics : MonoBehaviour
 
         
     }
-    private void Start()
+    bool done = false;
+    void Start()
     {
-        spawnPoints();
-        //spawnTwoPoints();
-        
+        if(spawnPerCube == true) SpawnPelinCube();
+
+        if(spawnSpehere == true)spawnPointsSpere();
+
+        if(Spawn2Points == true) spawnTwoPoints();
+        done = true;
     }
     void Update()
     {
-        visualizatePositions();
+        if(done == true)visualizatePositions();
     }
 }
