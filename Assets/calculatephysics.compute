@@ -172,7 +172,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                     float dis = distance(colidedParticle.position, changedPoint.position);
                     float3 dir = normalize(changedPoint.position - colidedParticle.position);//from changed ro colided par
                     float3 velDif = (colidedParticle.velocity - changedPoint.velocity);// changedPoint.velocity is 0,0,0
-                    float velDifScale = distance(float3(0, 0, 0), velDif);
+                    float velDifScale = length(velDif);
 
                     //calculating bounce force
                     
@@ -180,7 +180,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                     //changedPoint.velocity += bounceForce * dir;
                     if (dis< size * 0.8)
                     {
-                        float3 hitPoint = length(-colidedParticle.velocity) + -dir * (size * 0.8);
+                        float3 hitPoint = normalize(-changedPoint.velocity) + -dir * (size * 0.8);
                         float3 bounceDir = CalculateBounceDirection(hitPoint, dir, colidedParticle.position, size * 0.8);
                         changedPoint.position = hitPoint;
                         changedPoint.velocity = bounceDir * velDifScale;
