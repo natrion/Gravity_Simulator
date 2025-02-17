@@ -180,7 +180,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                     //changedPoint.velocity += bounceForce * dir;
                     if (dis< size * 0.8)
                     {
-                        float3 hitPoint = normalize(-changedPoint.velocity) + -dir * (size * 0.8);
+                        float3 hitPoint = colidedParticle.position + normalize(-changedPoint.velocity) * (size * 0.8);
                         float3 bounceDir = CalculateBounceDirection(hitPoint, dir, colidedParticle.position, size * 0.8);
                         changedPoint.position = hitPoint;
                         changedPoint.velocity = bounceDir * velDifScale;
