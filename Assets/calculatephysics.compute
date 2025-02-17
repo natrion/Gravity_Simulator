@@ -97,6 +97,20 @@ float RandomRange(float seed, float min, float max)
 {
     return lerp(min, max, Random(seed));
 }
+float3 GetExitPoint(float3 origin, float3 direction, float3 sphereCenter, float sphereRadius) {
+    float3 oc = origin - sphereCenter; // Vector from sphere center to origin
+    float a = dot(direction, direction);
+    float b = 2.0f * dot(oc, direction);
+    float c = dot(oc, oc) - sphereRadius * sphereRadius;
+
+    float discriminant = b * b - 4.0f * a * c;
+
+    if (discriminant < 0) return origin; // No intersection, return original point
+
+    float t = (-b + sqrt(discriminant)) / (2.0f * a); // Take the positive solution
+
+    return origin + direction * t; // Return the exit point
+}
 float3 CalculateBounceDirection(float3 hitPoint, float3 lightDir, float3 sphereCenter, float sphereRadius)
 {
     // Calculate the normal at the point of impact (from the sphere's center to the hit point)
@@ -112,7 +126,7 @@ float GStrenght;
 float size;
 float pointMass;
 float bounceForceMul = 1;//bounce force multipleyer
-float bindForceMul = 1;//bind force multipleyer
+float bounceFrictionLoss = 0.2;
 float framecalSpeedMul = 1;
 #define MAX_POINTS 20
 [numthreads(128,1,1)]
@@ -137,85 +151,45 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 float3 testPos = testParticle.position;//inicializatinf test pos
                 //geting values for calculating 
                 float3 dirTestPos = normalize(testPos - mainPos);
-                float disTestPos = distance(mainPos, testPos);                        
+                float disTestPos = distance(mainPos, testPos);                 
+                float3 velDif = (testParticle.velocity - changedPoint.velocity);// changedPoint.velocity is 0,0,0
+                float velDifScale = length(velDif);
                //adding points to all points that are clsoe to main point 
-                if (size*2 > disTestPos)
+
+                if (disTestPos < size)
                 {
-                    if (colidedPointsLenght < MAX_POINTS)
-                    {
-                        colidedPoints[colidedPointsLenght] = i;
-                        colidedPointsLenght++;
-                    }      
+                    // Get the exit point where the vector leaves the sphere
+                    float3 hitPoint = GetExitPoint(changedPoint.position, velDif, testParticle.position, size);
+
+                    // Compute the normal at the exit point
+                    float3 normal = normalize(hitPoint - testParticle.position);
+
+                    // Compute the reflected velocity
+                    float3 bounceDir = changedPoint.velocity - 2 * dot(changedPoint.velocity, normal) * normal;
+
+                    // Ensure the bounce direction is normalized
+                    bounceDir = normalize(bounceDir);
+
+                    // Update position and velocity
+                    changedPoint.position = hitPoint;
+                    changedPoint.velocity = bounceDir * length(changedPoint.velocity)*(1- bounceFrictionLoss); // Use the original velocity magnitude
+
                 }
-                else {                   
-                    //calculating gravity
-                    float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
-                    changedPoint.velocity += gravityForce * dirTestPos;                    
-                }
-            }
-        }
 
-        float samples = 5;
-
-        bool closeParticleFound = false;
-        //goint thrue all points that are close if there are some
-        if (colidedPointsLenght != 0)
-        {
-
-            for (int i = 0; i < colidedPointsLenght; i++)
-            {
-                Particle colidedParticle = pointsIn[colidedPoints[i]];
-                //sampling multiple positions
-                for (int o = 0; o < samples; o++)
-                {
-                    //geting values for calculating 
-                    float dis = distance(colidedParticle.position, changedPoint.position);
-                    float3 dir = normalize(changedPoint.position - colidedParticle.position);//from changed ro colided par
-                    float3 velDif = (colidedParticle.velocity - changedPoint.velocity);// changedPoint.velocity is 0,0,0
-                    float velDifScale = length(velDif);
-
-                    //calculating bounce force
-                    
-                    //float bounceForce = bounceForceMul / pow(dis / (size*0.8), 12);
-                    //changedPoint.velocity += bounceForce * dir;
-                    if (dis< size * 0.8)
-                    {
-                        float3 hitPoint = colidedParticle.position + normalize(-changedPoint.velocity) * (size * 0.8);
-                        float3 bounceDir = CalculateBounceDirection(hitPoint, dir, colidedParticle.position, size * 0.8);
-                        changedPoint.position = hitPoint;
-                        changedPoint.velocity = bounceDir * velDifScale;
-                        
-                    }                 
-                    //calculating bind force
-                    float bindForceStrenght = min(1, pow(max(0, 1/(dis - size * 0.5)),2)* bindForceMul); //min(pow(DisRevertedToOne, 1)/ samples,1);
-                   // changedPoint.velocity += normalize(velDif) *min(bindForceStrenght/2 , velDifScale);
-                    /*
-                    if (velDifScale < 0.2 && dis < size)
-                    {
-                        if (id.x< colidedPoints[i])
-                        {
-                            for (int numOfPointsTo = 0; numOfPointsTo < length; numOfPointsTo++)
-                            {
-
-                            }
-                        }
-                        else {
-                            return;
-                        }
-                    }*/
-                    //apling all close forces
-                    float3 disTochange = ((frameLenght * changedPoint.velocity) / samples )* framecalSpeedMul;
-                    changedPoint.position += disTochange;
-                 
-                }
-            }
-        }
-        else {
-            //caculating velociti for points that are not close together
-            float3 disTochange = frameLenght * changedPoint.velocity * framecalSpeedMul;
-            changedPoint.position += disTochange;
-        }
             
+                              
+                //calculating gravity
+                float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
+                changedPoint.velocity += gravityForce * dirTestPos;                    
+                
+            }
+        }
+
+       
+        //caculating velociti for points that are not close together
+        float3 disTochange = frameLenght * changedPoint.velocity * framecalSpeedMul;
+        changedPoint.position += disTochange;
+
         //apling buffers
         MetrixTransforms[id.x] = CreateTRSMatrix(changedPoint.position, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
         pointsOut[id.x] = changedPoint;

@@ -23,9 +23,8 @@ public class physics : MonoBehaviour
     [SerializeField] private float pointSize = 0.1f;
     [SerializeField] private float pointMass = 1;
     [SerializeField] private float GStrenght = 1;
-    [SerializeField] private float bounceForceMul = 1;
-    [Range(0, 0.00001f)]
-    [SerializeField] private float bindForceMul = 1;
+    [Range(0, 1f)]
+    [SerializeField] private float bounceFrictionLoss = 1;
     [Header("simulation")]
     [SerializeField] private int frameCal = 1;
     [Range(0f, 2f)]
@@ -63,7 +62,7 @@ public class physics : MonoBehaviour
                     
             Particle newpoint = new Particle();
             newpoint.position = pos;
-            newpoint.velocity = Random.onUnitSphere * Random.RandomRange(0, 1f);
+            newpoint.velocity = Random.onUnitSphere * Random.RandomRange(0, 0.01f);
             points[i ] = newpoint;                            
 
         }
@@ -103,11 +102,11 @@ public class physics : MonoBehaviour
     {
         points = new Particle[2];
         points[0] = new Particle();
-        points[0].velocity = Vector3.right * -0.01f;
+        points[0].velocity = Vector3.right * -0.1f;
         points[0].position = Vector3.right * 0.5f;
         points[1] = new Particle();
         points[1].position = Vector3.left * 0.5f;
-        points[1].velocity = Vector3.left * -0.01f;
+        points[1].velocity = Vector3.left * -0.1f;
     }
 
 
@@ -153,8 +152,7 @@ public class physics : MonoBehaviour
             physicsCom.SetFloat("GStrenght", GStrenght);
             physicsCom.SetFloat("pointMass", pointMass);
             physicsCom.SetFloat("frameLenght", Time.deltaTime);
-            physicsCom.SetFloat("bounceForceMul", bounceForceMul);
-            physicsCom.SetFloat("bindForceMul", bindForceMul); 
+            physicsCom.SetFloat("bounceFrictionLoss", bounceFrictionLoss); 
             physicsCom.SetFloat("framecalSpeedMul", framecalSpeedMul);
 
             //dispatch
