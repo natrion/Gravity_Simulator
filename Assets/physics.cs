@@ -23,16 +23,29 @@ public class physics : MonoBehaviour
     [SerializeField] private float pointSize = 0.1f;
     [SerializeField] private float pointMass = 1;
     [SerializeField] private float GStrenght = 1;
-    [SerializeField] private int frameCal = 1;
     [SerializeField] private float bounceForceMul = 1;
+    [Range(0, 0.00001f)]
     [SerializeField] private float bindForceMul = 1;
+    [Header("simulation")]
+    [SerializeField] private int frameCal = 1;
+    [Range(0f, 2f)]
+    [SerializeField] private float framecalSpeedMul = 1;
+    struct particleGroup
+    {
+        public int id;
+        public Vector3 position;
+        public Vector3 velocity;
+        public float mass;
+    };
     struct Particle
     {
         public Vector3 position;
         public Vector3 velocity;
-        
-    }
-    
+    };
+    private Particle[] points;
+    private particleGroup[] pointGroups;
+    private Vector2Int[] groupInfs;
+
     Vector3 EulerToNormal(Vector3 eulerAngles)
     {
         Quaternion rotation = Quaternion.Euler(eulerAngles); // Euler na Quaternion
@@ -96,7 +109,7 @@ public class physics : MonoBehaviour
         points[1].position = Vector3.left * 0.5f;
         points[1].velocity = Vector3.left * -0.01f;
     }
-    private Particle[] points;
+
 
     void visualizatePositions()
     {
@@ -104,16 +117,35 @@ public class physics : MonoBehaviour
         {
             //declearing buffers
             int pointStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Particle));
+            int pointGrupStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(particleGroup));
+
             int positionsNum = points.Length;
+
+            ComputeBuffer pointGroupsInBuffer = new ComputeBuffer(positionsNum, pointGrupStructuresize);
+            pointGroupsInBuffer.SetData(pointGroups);
+            ComputeBuffer pointGroupsoutBuffer = new ComputeBuffer(positionsNum, pointGrupStructuresize);
+
+            ComputeBuffer groupInfsInBuffer = new ComputeBuffer(positionsNum, sizeof(int)*2);
+            groupInfsInBuffer.SetData(groupInfs);
+            ComputeBuffer groupInfsoutBuffer = new ComputeBuffer(positionsNum, sizeof(int) * 2);
+
             ComputeBuffer pointsInBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
             pointsInBuffer.SetData(points);
             ComputeBuffer pointsOutBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
+
             int mainKernel = physicsCom.FindKernel("CSMain");
             ComputeBuffer outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 16);
 
             //seting buffers to shader
+            physicsCom.SetBuffer(mainKernel, "particleGroupsIn", groupInfsInBuffer);
+            physicsCom.SetBuffer(mainKernel, "particleGroupsOut", groupInfsoutBuffer);
+
+            physicsCom.SetBuffer(mainKernel, "particleGroupsIn", pointGroupsInBuffer);
+            physicsCom.SetBuffer(mainKernel, "particleGroupsOut", pointGroupsoutBuffer);
+
             physicsCom.SetBuffer(mainKernel, "pointsIn", pointsInBuffer);
             physicsCom.SetBuffer(mainKernel, "pointsOut", pointsOutBuffer);
+
             physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
 
             //setting data for dispach
@@ -122,10 +154,11 @@ public class physics : MonoBehaviour
             physicsCom.SetFloat("pointMass", pointMass);
             physicsCom.SetFloat("frameLenght", Time.deltaTime);
             physicsCom.SetFloat("bounceForceMul", bounceForceMul);
-            physicsCom.SetFloat("bindForceMul", bindForceMul);
-            
+            physicsCom.SetFloat("bindForceMul", bindForceMul); 
+            physicsCom.SetFloat("framecalSpeedMul", framecalSpeedMul);
+
             //dispatch
-            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 64f), 1, 1);
+            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 128f), 1, 1);
 
             //taking data from dispach
             points = new Particle[positionsNum];
@@ -141,6 +174,27 @@ public class physics : MonoBehaviour
 
         
     }
+    void generaeOtherdata()
+    {
+        pointGroups = new particleGroup[points.Length];
+        groupInfs = new Vector2Int[points.Length];
+        for (int i = 0; i < points.Length; i++)
+        {
+            Particle Particle = points[i];
+
+            particleGroup pointGroup = new particleGroup();
+            pointGroup.id = i;
+            pointGroup.position = Particle.position;
+            pointGroup.velocity = Particle.velocity;
+            pointGroup.mass = pointMass;
+
+            groupInfs[i] =  new Vector2Int(i,i);
+
+        }     
+        
+            
+               
+    }
     bool done = false;
     void Start()
     {
@@ -149,6 +203,8 @@ public class physics : MonoBehaviour
         if(spawnSpehere == true)spawnPointsSpere();
 
         if(Spawn2Points == true) spawnTwoPoints();
+
+        generaeOtherdata();
         done = true;
     }
     void Update()

@@ -1,5 +1,12 @@
 #pragma kernel CSMain
 
+struct particleGroup
+{
+    int id;
+    float3 position;
+    float3 velocity;
+    float mass;
+};
 struct Particle
 {
     float3 position;
@@ -8,6 +15,10 @@ struct Particle
 
 RWStructuredBuffer<Particle> pointsIn;
 RWStructuredBuffer<Particle> pointsOut;
+AppendStructuredBuffer<int2> particleGroupsIn; // first one is particle second one is paricle group
+AppendStructuredBuffer<int2> particleGroupsOut; // first one is particle second one is paricle group
+AppendStructuredBuffer<particleGroup> particleGroupIn;
+AppendStructuredBuffer<particleGroup> particleGroupOut;
 RWStructuredBuffer<float4x4> MetrixTransforms;
 
 bool NormalHitsSphere(float3 normal, float3 origin, float3 spherePos, float sphereRadius, out float3 hitPos) {
@@ -67,12 +78,42 @@ float4x4 CreateTRSMatrix(float3 pos, float4 rot, float3 scale)
     // Combine Translation, Rotation, and Scaling Matrices (TRS)
     return mul(translationMatrix, mul(rotationMatrix, scaleMatrix));
 }
+float RandomFloat(float3 position)
+{
+    // Simple hash function for pseudo-random number generation
+    uint seed = (uint)(position.x * 73.0f + position.y * 97.0f + position.z * 131.0f);
+    seed = (seed << 13) ^ seed;
+    seed = seed * (seed * seed * 15731 + 789221) + 1376312589;
+    float randomValue = (float)(seed & 0x7fffffff) / 0x7fffffff; // Normalize to [0, 1]
+    return randomValue;
+}
+float Random(float seed)
+{
+    return frac(sin(seed) * 43758.5453);
+}
+
+
+float RandomRange(float seed, float min, float max)
+{
+    return lerp(min, max, Random(seed));
+}
+float3 CalculateBounceDirection(float3 hitPoint, float3 lightDir, float3 sphereCenter, float sphereRadius)
+{
+    // Calculate the normal at the point of impact (from the sphere's center to the hit point)
+    float3 normal = normalize(hitPoint - sphereCenter);
+
+    // Calculate the bounce direction using the reflection formula
+    return lightDir - 2.0 * dot(lightDir, normal) * normal;
+
+}
+
 float frameLenght;
 float GStrenght;
 float size;
 float pointMass;
 float bounceForceMul = 1;//bounce force multipleyer
 float bindForceMul = 1;//bind force multipleyer
+float framecalSpeedMul = 1;
 #define MAX_POINTS 20
 [numthreads(128,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
@@ -115,6 +156,8 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         }
 
         float samples = 5;
+
+        bool closeParticleFound = false;
         //goint thrue all points that are close if there are some
         if (colidedPointsLenght != 0)
         {
@@ -126,23 +169,50 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 for (int o = 0; o < samples; o++)
                 {
                     //geting values for calculating 
-                    float3 dis = distance(colidedParticle.position, changedPoint.position);
-                    float3 dir = normalize(changedPoint.position - colidedParticle.position);
+                    float dis = distance(colidedParticle.position, changedPoint.position);
+                    float3 dir = normalize(changedPoint.position - colidedParticle.position);//from changed ro colided par
+                    float3 velDif = (colidedParticle.velocity - changedPoint.velocity);// changedPoint.velocity is 0,0,0
+                    float velDifScale = distance(float3(0, 0, 0), velDif);
+
                     //calculating bounce force
-                    float bounceForce = bounceForceMul / pow(dis / (size*0.8), 12);
-                    changedPoint.velocity += bounceForce * dir;
+                    
+                    //float bounceForce = bounceForceMul / pow(dis / (size*0.8), 12);
+                    //changedPoint.velocity += bounceForce * dir;
+                    if (dis< size * 0.8)
+                    {
+                        float3 hitPoint = length(-colidedParticle.velocity) + -dir * (size * 0.8);
+                        float3 bounceDir = CalculateBounceDirection(hitPoint, dir, colidedParticle.position, size * 0.8);
+                        changedPoint.position = hitPoint;
+                        changedPoint.velocity = bounceDir * velDifScale;
+                        
+                    }                 
                     //calculating bind force
-                    float bindForceStrenght = min(1, pow(max(0, 1/(dis - size * 0.8)),2)* bindForceMul); //min(pow(DisRevertedToOne, 1)/ samples,1);
-                    changedPoint.velocity += (colidedParticle.velocity- changedPoint.velocity)*(bindForceStrenght/2);
+                    float bindForceStrenght = min(1, pow(max(0, 1/(dis - size * 0.5)),2)* bindForceMul); //min(pow(DisRevertedToOne, 1)/ samples,1);
+                   // changedPoint.velocity += normalize(velDif) *min(bindForceStrenght/2 , velDifScale);
+                    /*
+                    if (velDifScale < 0.2 && dis < size)
+                    {
+                        if (id.x< colidedPoints[i])
+                        {
+                            for (int numOfPointsTo = 0; numOfPointsTo < length; numOfPointsTo++)
+                            {
+
+                            }
+                        }
+                        else {
+                            return;
+                        }
+                    }*/
                     //apling all close forces
-                    float3 disTochange = (frameLenght * changedPoint.velocity) / samples;
+                    float3 disTochange = ((frameLenght * changedPoint.velocity) / samples )* framecalSpeedMul;
                     changedPoint.position += disTochange;
+                 
                 }
             }
         }
         else {
             //caculating velociti for points that are not close together
-            float3 disTochange = frameLenght * changedPoint.velocity;
+            float3 disTochange = frameLenght * changedPoint.velocity * framecalSpeedMul;
             changedPoint.position += disTochange;
         }
             
@@ -151,4 +221,5 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         pointsOut[id.x] = changedPoint;
 
     }
+    
 }
