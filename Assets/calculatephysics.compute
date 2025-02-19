@@ -160,19 +160,17 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 {
                     // Get the exit point where the vector leaves the sphere
                     float3 hitPoint = GetExitPoint(changedPoint.position, velDif, testParticle.position, size);
-
                     // Compute the normal at the exit point
                     float3 normal = normalize(hitPoint - testParticle.position);
-
                     // Compute the reflected velocity
                     float3 bounceDir = changedPoint.velocity - 2 * dot(changedPoint.velocity, normal) * normal;
-
                     // Ensure the bounce direction is normalized
                     bounceDir = normalize(bounceDir);
-
-                    // Update position and velocity
                     changedPoint.position = hitPoint;
                     changedPoint.velocity = bounceDir * length(changedPoint.velocity)*(1- bounceFrictionLoss); // Use the original velocity magnitude
+                    if (velDifScale<0.1) {
+                        
+                    }
 
                 }
 

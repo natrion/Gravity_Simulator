@@ -114,38 +114,13 @@ public class physics : MonoBehaviour
     {
         for (int i = 0; i < frameCal; i++)//repeating calculatin forfaster simulation
         {
-            //declearing buffers
-            int pointStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Particle));
-            int pointGrupStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(particleGroup));
 
-            int positionsNum = points.Length;
-
-            ComputeBuffer pointGroupsInBuffer = new ComputeBuffer(positionsNum, pointGrupStructuresize);
+            //setting data 
             pointGroupsInBuffer.SetData(pointGroups);
-            ComputeBuffer pointGroupsoutBuffer = new ComputeBuffer(positionsNum, pointGrupStructuresize);
 
-            ComputeBuffer groupInfsInBuffer = new ComputeBuffer(positionsNum, sizeof(int)*2);
             groupInfsInBuffer.SetData(groupInfs);
-            ComputeBuffer groupInfsoutBuffer = new ComputeBuffer(positionsNum, sizeof(int) * 2);
 
-            ComputeBuffer pointsInBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
             pointsInBuffer.SetData(points);
-            ComputeBuffer pointsOutBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
-
-            int mainKernel = physicsCom.FindKernel("CSMain");
-            ComputeBuffer outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 16);
-
-            //seting buffers to shader
-            physicsCom.SetBuffer(mainKernel, "particleGroupsIn", groupInfsInBuffer);
-            physicsCom.SetBuffer(mainKernel, "particleGroupsOut", groupInfsoutBuffer);
-
-            physicsCom.SetBuffer(mainKernel, "particleGroupsIn", pointGroupsInBuffer);
-            physicsCom.SetBuffer(mainKernel, "particleGroupsOut", pointGroupsoutBuffer);
-
-            physicsCom.SetBuffer(mainKernel, "pointsIn", pointsInBuffer);
-            physicsCom.SetBuffer(mainKernel, "pointsOut", pointsOutBuffer);
-
-            physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
 
             //setting data for dispach
             physicsCom.SetFloat("size", pointSize);
@@ -159,18 +134,71 @@ public class physics : MonoBehaviour
             physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 128f), 1, 1);
 
             //taking data from dispach
+
             points = new Particle[positionsNum];
             pointsOutBuffer.GetData(points);
-            pointsOutBuffer.Release();
+
+            points = new Particle[positionsNum];
+            pointsOutBuffer.GetData(points);
+
+            points = new Particle[positionsNum];
+            pointsOutBuffer.GetData(points);
+
             Matrix4x4[] pointsTRS = new Matrix4x4[positionsNum];
             outMetrixTransformBuffer.GetData(pointsTRS);
-            outMetrixTransformBuffer.Release();
             //drawing meshes
 
             if (i == frameCal-1) Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, positionsNum);
         }
 
         
+    }
+    ComputeBuffer pointGroupsInBuffer;
+    ComputeBuffer pointGroupsoutBuffer;
+
+    ComputeBuffer groupInfsInBuffer;
+    ComputeBuffer groupInfsoutBuffer;
+
+    ComputeBuffer pointsInBuffer;
+    ComputeBuffer pointsOutBuffer;
+
+    ComputeBuffer outMetrixTransformBuffer;
+    int mainKernel;
+    int pointStructuresize;
+    int pointGrupStructuresize;
+    int positionsNum;
+    void prepareBuffers()
+    {
+        pointStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Particle));
+        pointGrupStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(particleGroup));
+
+        positionsNum = points.Length;
+        //declearing buffers
+        pointGroupsInBuffer = new ComputeBuffer(positionsNum, pointGrupStructuresize);
+        pointGroupsoutBuffer = new ComputeBuffer(positionsNum, pointGrupStructuresize);
+
+        groupInfsInBuffer = new ComputeBuffer(positionsNum, sizeof(int) * 2);
+        groupInfsoutBuffer = new ComputeBuffer(positionsNum, sizeof(int) * 2);
+
+        pointsInBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
+        pointsOutBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
+
+        outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 16);
+
+        mainKernel = physicsCom.FindKernel("CSMain");
+
+        //setting buffers to a compute shader
+        physicsCom.SetBuffer(mainKernel, "particleGroupsIn", groupInfsInBuffer);
+        physicsCom.SetBuffer(mainKernel, "particleGroupsOut", groupInfsoutBuffer);
+
+        physicsCom.SetBuffer(mainKernel, "particleGroupsIn", pointGroupsInBuffer);
+        physicsCom.SetBuffer(mainKernel, "particleGroupsOut", pointGroupsoutBuffer);
+
+        physicsCom.SetBuffer(mainKernel, "pointsIn", pointsInBuffer);
+        physicsCom.SetBuffer(mainKernel, "pointsOut", pointsOutBuffer);
+
+        physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
+
     }
     void generaeOtherdata()
     {
@@ -196,11 +224,14 @@ public class physics : MonoBehaviour
     bool done = false;
     void Start()
     {
-        if(spawnPerCube == true) SpawnPelinCube();
+
+        if (spawnPerCube == true) SpawnPelinCube();
 
         if(spawnSpehere == true)spawnPointsSpere();
 
         if(Spawn2Points == true) spawnTwoPoints();
+
+        prepareBuffers();
 
         generaeOtherdata();
         done = true;
