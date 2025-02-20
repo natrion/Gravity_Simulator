@@ -38,8 +38,8 @@ public class physics : MonoBehaviour
     };
     struct Particle
     {
+        public int GroupId;
         public Vector3 position;
-        public Vector3 velocity;
     };
     private Particle[] points;
     private particleGroup[] pointGroups;
@@ -54,23 +54,23 @@ public class physics : MonoBehaviour
     void spawnPointsSpere()
     {
 
-        points = new Particle[spawnAmount];
+        pointGroups = new particleGroup[spawnAmount];
         float totalSpaceRadius = Mathf.Pow((SpacePerAmount * spawnAmount) / ((4f / 3f) * Mathf.PI), 1f / 3f);
         for (int i = 0; i < spawnAmount; i++)
         {
-            Vector3 pos = Random.onUnitSphere * Mathf.Pow(Random.RandomRange(0f, 1f), 1f / 3f) * totalSpaceRadius;           
-                    
-            Particle newpoint = new Particle();
+            Vector3 pos = Random.onUnitSphere * Mathf.Pow(Random.RandomRange(0f, 1f), 1f / 3f) * totalSpaceRadius;
+
+            particleGroup newpoint = new particleGroup();
             newpoint.position = pos;
             newpoint.velocity = Random.onUnitSphere * Random.RandomRange(0, 0.01f);
-            points[i ] = newpoint;                            
+            pointGroups[i ] = newpoint;                            
 
         }
     }
     
     void SpawnPelinCube ()
     {
-        List<Particle> pointsList = new List<Particle>();
+        List<particleGroup> pointsList = new List<particleGroup>();
         float sideLenght = perlinCubeLenghtPerPoint * (float)sideNum;
         Vector3 seed = new Vector3(Random.RandomRange(-10000, 10000), Random.RandomRange(-10000, 10000), Random.RandomRange(-10000, 10000));
         for (float x = 0; x < sideLenght; x+= perlinCubeLenghtPerPoint)
@@ -83,7 +83,7 @@ public class physics : MonoBehaviour
                     float perNum = perlinNoise.get3DPerlinNoise(pos+ seed, perlinFreqency);
                     if (perNum>0.5)
                     {
-                        Particle newpoint = new Particle();
+                        particleGroup newpoint = new particleGroup();
                         float maxPosVar = Mathf.Max(0, perlinCubeLenghtPerPoint - pointSize);
                         newpoint.position = pos+ new Vector3(Random.RandomRange(-maxPosVar, maxPosVar), Random.RandomRange(-maxPosVar, maxPosVar), Random.RandomRange(-maxPosVar, maxPosVar));
                         newpoint.velocity = Random.onUnitSphere * Random.RandomRange(0, 1f);
@@ -92,21 +92,21 @@ public class physics : MonoBehaviour
                 }
             }
         }
-        points = new Particle[pointsList.Count];
+        pointGroups = new particleGroup[pointsList.Count];
         for (int i = 0; i < pointsList.Count; i++)
         {
-            points[i] = pointsList[i];
+            pointGroups[i] = pointsList[i];
         }
     }
     void spawnTwoPoints()
     {
-        points = new Particle[2];
-        points[0] = new Particle();
-        points[0].velocity = Vector3.right * -0.1f;
-        points[0].position = Vector3.right * 0.5f;
-        points[1] = new Particle();
-        points[1].position = Vector3.left * 0.5f;
-        points[1].velocity = Vector3.left * -0.1f;
+        pointGroups = new particleGroup[2];
+        pointGroups[0] = new particleGroup();
+        pointGroups[0].velocity = Vector3.right * -0.1f;
+        pointGroups[0].position = Vector3.right * 0.5f;
+        pointGroups[1] = new particleGroup();
+        pointGroups[1].position = Vector3.left * 0.5f;
+        pointGroups[1].velocity = Vector3.left * -0.1f;
     }
 
 
@@ -117,8 +117,6 @@ public class physics : MonoBehaviour
 
             //setting data 
             pointGroupsInBuffer.SetData(pointGroups);
-
-            groupInfsInBuffer.SetData(groupInfs);
 
             pointsInBuffer.SetData(points);
 
@@ -131,18 +129,15 @@ public class physics : MonoBehaviour
             physicsCom.SetFloat("framecalSpeedMul", framecalSpeedMul);
 
             //dispatch
-            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 128f), 1, 1);
+            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt((positionsNum*2) / 128f), 1, 1);
 
             //taking data from dispach
 
             points = new Particle[positionsNum];
             pointsOutBuffer.GetData(points);
 
-            points = new Particle[positionsNum];
-            pointsOutBuffer.GetData(points);
-
-            points = new Particle[positionsNum];
-            pointsOutBuffer.GetData(points);
+            pointGroups = new particleGroup[positionsNum];
+            pointGroupsoutBuffer.GetData(pointGroups);
 
             Matrix4x4[] pointsTRS = new Matrix4x4[positionsNum];
             outMetrixTransformBuffer.GetData(pointsTRS);
@@ -177,9 +172,6 @@ public class physics : MonoBehaviour
         pointGroupsInBuffer = new ComputeBuffer(positionsNum, pointGrupStructuresize);
         pointGroupsoutBuffer = new ComputeBuffer(positionsNum, pointGrupStructuresize);
 
-        groupInfsInBuffer = new ComputeBuffer(positionsNum, sizeof(int) * 2);
-        groupInfsoutBuffer = new ComputeBuffer(positionsNum, sizeof(int) * 2);
-
         pointsInBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
         pointsOutBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
 
@@ -188,8 +180,8 @@ public class physics : MonoBehaviour
         mainKernel = physicsCom.FindKernel("CSMain");
 
         //setting buffers to a compute shader
-        physicsCom.SetBuffer(mainKernel, "particleGroupsIn", groupInfsInBuffer);
-        physicsCom.SetBuffer(mainKernel, "particleGroupsOut", groupInfsoutBuffer);
+        //physicsCom.SetBuffer(mainKernel, "particleGroupsIn", groupInfsInBuffer);
+        //physicsCom.SetBuffer(mainKernel, "particleGroupsOut", groupInfsoutBuffer);
 
         physicsCom.SetBuffer(mainKernel, "particleGroupsIn", pointGroupsInBuffer);
         physicsCom.SetBuffer(mainKernel, "particleGroupsOut", pointGroupsoutBuffer);
@@ -202,23 +194,20 @@ public class physics : MonoBehaviour
     }
     void generaeOtherdata()
     {
-        pointGroups = new particleGroup[points.Length];
-        groupInfs = new Vector2Int[points.Length];
+        points = new Particle[pointGroups.Length];
         for (int i = 0; i < points.Length; i++)
         {
             Particle Particle = points[i];
 
-            particleGroup pointGroup = new particleGroup();
-            pointGroup.id = i;
-            pointGroup.position = Particle.position;
-            pointGroup.velocity = Particle.velocity;
-            pointGroup.mass = pointMass;
+            pointGroups[i].id = i;
+            pointGroups[i].mass = pointMass;
 
-            groupInfs[i] =  new Vector2Int(i,i);
+            Particle.GroupId = i;
+            Particle.position = Vector3.zero;
 
-        }     
-        
-            
+            points[i] = Particle;
+
+        }                        
                
     }
     bool done = false;
@@ -231,9 +220,10 @@ public class physics : MonoBehaviour
 
         if(Spawn2Points == true) spawnTwoPoints();
 
+        generaeOtherdata();
+
         prepareBuffers();
 
-        generaeOtherdata();
         done = true;
     }
     void Update()

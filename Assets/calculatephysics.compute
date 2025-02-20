@@ -9,16 +9,16 @@ struct particleGroup
 };
 struct Particle
 {
+    int GroupId;
     float3 position;
-    float3 velocity;
 };
 
 RWStructuredBuffer<Particle> pointsIn;
 RWStructuredBuffer<Particle> pointsOut;
-AppendStructuredBuffer<int2> particleGroupsIn; // first one is particle second one is paricle group
-AppendStructuredBuffer<int2> particleGroupsOut; // first one is particle second one is paricle group
-AppendStructuredBuffer<particleGroup> particleGroupIn;
-AppendStructuredBuffer<particleGroup> particleGroupOut;
+//AppendStructuredBuffer<int2> particleGroupsIn; // first one is particle second one is paricle group
+//AppendStructuredBuffer<int2> particleGroupsOut; // first one is particle second one is paricle group
+RWStructuredBuffer<particleGroup> particleGroupsIn;
+RWStructuredBuffer<particleGroup> particleGroupsOut;
 RWStructuredBuffer<float4x4> MetrixTransforms;
 
 bool NormalHitsSphere(float3 normal, float3 origin, float3 spherePos, float sphereRadius, out float3 hitPos) {
@@ -132,29 +132,31 @@ float framecalSpeedMul = 1;
 [numthreads(128,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
+	int comLenght = pointsIn.Length;
+    
     float collisionDis = 0.1;
-    if (id.x < pointsIn.Length)//checks if this is still part od the distances
+	if (id.x < comLenght)//checks if this is still part od the distances
     {
-        int colidedPoints[MAX_POINTS]; //array of points that are close to main point
-        int colidedPointsLenght = 0;// lenght of colidedPoints
 
         float3 mainPos = pointsIn[id.x].position;//gets the position that the thred is checking
 
-        Particle changedPoint = pointsIn[id.x];
-        
+        particleGroup changedPoint = particleGroupsIn[id.x];
+
         //going thrue all points to calculate forces
-        for (int i = 0; i < pointsIn.Length; i++)
+		for (int i = 0; i < comLenght; i++)
         {
             if (i != id.x)//only doing caculations on diferent points
-            {               
-                Particle testParticle = pointsIn[i];
-                float3 testPos = testParticle.position;//inicializatinf test pos
+            {
+                Particle paticle = pointsIn[i];
+                particleGroup testParticle =  particleGroupsIn[paticle.GroupId];
+                float3 testPos = testParticle.position+ paticle.position;//inicializatinf test pos
+
                 //geting values for calculating 
                 float3 dirTestPos = normalize(testPos - mainPos);
-                float disTestPos = distance(mainPos, testPos);                 
+                float disTestPos = distance(mainPos, testPos);
                 float3 velDif = (testParticle.velocity - changedPoint.velocity);// changedPoint.velocity is 0,0,0
                 float velDifScale = length(velDif);
-               //adding points to all points that are clsoe to main point 
+                //adding points to all points that are clsoe to main point 
 
                 if (disTestPos < size)
                 {
@@ -167,30 +169,48 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                     // Ensure the bounce direction is normalized
                     bounceDir = normalize(bounceDir);
                     changedPoint.position = hitPoint;
-                    changedPoint.velocity = bounceDir * length(changedPoint.velocity)*(1- bounceFrictionLoss); // Use the original velocity magnitude
-                    if (velDifScale<0.1) {
-                        
-                    }
+                    changedPoint.velocity = bounceDir * length(changedPoint.velocity) * (1 - bounceFrictionLoss); // Use the original velocity magnitude
+                    //merging two groups if too close 
+                    //if (velDifScale < 0.1 & id.x< i ) {
+                   //     if (changedPoint.mass > testParticle.mass){
+                   //         testParticle.id = changedPoint.id;
+                   //     }
+                   // }
 
                 }
 
-            
-                              
+
+
                 //calculating gravity
                 float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
-                changedPoint.velocity += gravityForce * dirTestPos;                    
-                
+                changedPoint.velocity += gravityForce * dirTestPos;
+
             }
         }
 
-       
+
         //caculating velociti for points that are not close together
         float3 disTochange = frameLenght * changedPoint.velocity * framecalSpeedMul;
         changedPoint.position += disTochange;
 
         //apling buffers
-        MetrixTransforms[id.x] = CreateTRSMatrix(changedPoint.position, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
-        pointsOut[id.x] = changedPoint;
+        particleGroupsOut[id.x] = changedPoint;
+
+    }
+	else if (id.x < comLenght * 2)
+	{
+        Particle particle = pointsIn[id.x - comLenght];
+
+		particleGroup particleGroup = particleGroupsIn[particle.GroupId];
+
+        //if (particle.GroupId != particleGroup.id)
+       // {
+       //     particle.GroupId = particleGroup.id;
+       //     particleGroup = particleGroupsIn[particle.GroupId];
+       // }
+
+		pointsOut[id.x - comLenght] = particle;
+		MetrixTransforms[id.x - comLenght] = CreateTRSMatrix(particleGroup.position+particle.position, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
 
     }
     

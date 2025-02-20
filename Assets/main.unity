@@ -155,10 +155,10 @@ MonoBehaviour:
   physicsCom: {fileID: 7200000, guid: 385bea974c5300e4fa24e86e52b5d849, type: 3}
   pointMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   pointMaterial: {fileID: 2100000, guid: c3de0fc030849674abc4131995ee2c53, type: 2}
-  spawnSpehere: 1
+  spawnSpehere: 0
   spawnAmount: 15
   SpacePerAmount: 2
-  spawnPerCube: 0
+  spawnPerCube: 1
   perlinFreqency: 0.05
   perlinCubeLenghtPerPoint: 1.5
   sideNum: 50
