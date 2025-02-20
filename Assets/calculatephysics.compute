@@ -138,7 +138,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
 	if (id.x < comLenght)//checks if this is still part od the distances
     {
 
-        float3 mainPos = pointsIn[id.x].position;//gets the position that the thred is checking
+        float3 mainPos = particleGroupsIn[id.x].position;//gets the position that the thred is checking
 
         particleGroup changedPoint = particleGroupsIn[id.x];
 
@@ -147,9 +147,9 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         {
             if (i != id.x)//only doing caculations on diferent points
             {
-                Particle paticle = pointsIn[i];
-                particleGroup testParticle =  particleGroupsIn[paticle.GroupId];
-                float3 testPos = testParticle.position+ paticle.position;//inicializatinf test pos
+                Particle testPoint = pointsIn[i];
+                particleGroup testParticle =  particleGroupsIn[testPoint.GroupId];
+                float3 testPos = testParticle.position+ testPoint.position;//inicializatinf test pos
 
                 //geting values for calculating 
                 float3 dirTestPos = normalize(testPos - mainPos);
