@@ -19,6 +19,8 @@ public class physics : MonoBehaviour
     [SerializeField] private int sideNum = 30;
     [Header("Spawning Other")]
     [SerializeField] private bool Spawn2Points;
+    [SerializeField] private float distanceOfTwoPoints;
+    [SerializeField] private float velocitiOfTwoPoints;
     [Header("physics")]
     [SerializeField] private float pointSize = 0.1f;
     [SerializeField] private float pointMass = 1;
@@ -29,6 +31,7 @@ public class physics : MonoBehaviour
     [SerializeField] private int frameCal = 1;
     [Range(0f, 2f)]
     [SerializeField] private float framecalSpeedMul = 1;
+    [System.Serializable]
     struct particleGroup
     {
         public int id;
@@ -36,13 +39,14 @@ public class physics : MonoBehaviour
         public Vector3 velocity;
         public float mass;
     };
+    [System.Serializable]
     struct Particle
     {
         public int GroupId;
         public Vector3 position;
     };
-    private Particle[] points;
-    private particleGroup[] pointGroups;
+    [SerializeField] private Particle[] points;
+    [SerializeField] private particleGroup[] pointGroups;
     private Vector2Int[] groupInfs;
 
     Vector3 EulerToNormal(Vector3 eulerAngles)
@@ -102,11 +106,11 @@ public class physics : MonoBehaviour
     {
         pointGroups = new particleGroup[2];
         pointGroups[0] = new particleGroup();
-        pointGroups[0].velocity = Vector3.right * -0.1f;
-        pointGroups[0].position = Vector3.right * 0.5f;
+        pointGroups[0].velocity = Vector3.right * -velocitiOfTwoPoints/2;
+        pointGroups[0].position = Vector3.right * distanceOfTwoPoints/2;
         pointGroups[1] = new particleGroup();
-        pointGroups[1].position = Vector3.left * 0.5f;
-        pointGroups[1].velocity = Vector3.left * -0.1f;
+        pointGroups[1].position = Vector3.left * distanceOfTwoPoints/2;
+        pointGroups[1].velocity = Vector3.left * -velocitiOfTwoPoints/2;
     }
 
 
@@ -119,7 +123,6 @@ public class physics : MonoBehaviour
             pointGroupsInBuffer.SetData(pointGroups);
 
             pointsInBuffer.SetData(points);
-
             //setting data for dispach
             physicsCom.SetFloat("size", pointSize);
             physicsCom.SetFloat("GStrenght", GStrenght);
