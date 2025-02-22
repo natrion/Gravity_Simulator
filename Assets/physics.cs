@@ -31,6 +31,7 @@ public class physics : MonoBehaviour
     [SerializeField] private int frameCal = 1;
     [Range(0f, 2f)]
     [SerializeField] private float framecalSpeedMul = 1;
+    [SerializeField] private int NUM_THREADS = 64;
     [System.Serializable]
     struct particleGroup
     {
@@ -124,6 +125,7 @@ public class physics : MonoBehaviour
 
             pointsInBuffer.SetData(points);
             //setting data for dispach
+            physicsCom.SetFloat("NUM_THREADS", NUM_THREADS);
             physicsCom.SetFloat("size", pointSize);
             physicsCom.SetFloat("GStrenght", GStrenght);
             physicsCom.SetFloat("pointMass", pointMass);
@@ -132,7 +134,7 @@ public class physics : MonoBehaviour
             physicsCom.SetFloat("framecalSpeedMul", framecalSpeedMul);
 
             //dispatch
-            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt((positionsNum*2) / 128f), 1, 1);
+            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt( positionsNum / NUM_THREADS)*2, 1, 1);
 
             //taking data from dispach
 
