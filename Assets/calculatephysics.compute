@@ -128,13 +128,14 @@ float pointMass;
 float bounceForceMul = 1;//bounce force multipleyer
 float bounceFrictionLoss = 0.2;
 float framecalSpeedMul = 1;
+float numthreadCeil;
 #define NUM_THREADS 128 
 #define MAX_POINTS 20
 [numthreads(NUM_THREADS,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
 	int comLenght = pointsIn.Length;
-    int comlenghtCeil = (int)(ceil(comLenght / NUM_THREADS)* NUM_THREADS);
+    int comlenghtCeil = numthreadCeil * NUM_THREADS;
     float collisionDis = 0.1;
 	if (id.x < comLenght )//checks if this is still part od the distances
     {
@@ -196,9 +197,10 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                         if (whoIsBigger == true)
                         {
                             changedPoint.id = testParticle.id;
-                        }
+                        }                        
                         else {
                             changedPoint.mass += testParticle.mass;
+                            changedPoint.velocity = lerp(changedPoint.velocity, testParticle.velocity, testParticle.mass / (testParticle.mass + changedPoint.mass));
                         }
 
                     }
@@ -216,9 +218,9 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         
 
     }
-	else if (id.x >= comlenghtCeil && id.x< comlenghtCeil+ comLenght)
+	else if (id.x >= comlenghtCeil && comlenghtCeil *2 >id.x) //= comlenghtCeil && id.x< comlenghtCeil+ comLenght)
 	{
-        Particle particle = pointsIn[id.x - comlenghtCeil ];
+        Particle particle = pointsIn[id.x - comlenghtCeil];
 
 		particleGroup particleGroup = particleGroupsIn[particle.GroupId];
 
