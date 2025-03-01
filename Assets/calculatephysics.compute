@@ -12,7 +12,6 @@ struct Particle
     int GroupId;
     float3 position;
 };
-
 RWStructuredBuffer<Particle> pointsIn;
 RWStructuredBuffer<Particle> pointsOut;
 //AppendStructuredBuffer<int2> particleGroupsIn; // first one is particle second one is paricle group
@@ -139,8 +138,8 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     float collisionDis = 0.1;
 	if (id.x < comLenght )//checks if this is still part od the distances
     {
-        if (particleGroupsIn[id.x].id == id.x)
-        {
+        //if (particleGroupsIn[id.x].mass >0)
+        //{
             float3 mainPos = particleGroupsIn[id.x].position;//gets the position that the thred is checking
 
             particleGroup changedPoint = particleGroupsIn[id.x];
@@ -150,6 +149,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
             {
                 if (i != id.x && i == particleGroupsIn[i].id)//only doing caculations on diferent points
                 {
+                    
                     particleGroup testParticle = particleGroupsIn[i];
                     float3 testPos = testParticle.position;//inicializatinf test pos
 
@@ -162,25 +162,10 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                     float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
                     changedPoint.velocity += gravityForce * dirTestPos;
                     //calculating bouncing
-                    if (disTestPos < size)
-                    {
-                        // Get the exit point where the vector leaves the sphere
-                        float3 hitPoint = GetExitPoint(changedPoint.position, velDif, testParticle.position, size);
-                        // Compute the normal at the exit point
-                        float3 normal = normalize(hitPoint - testParticle.position);
-                        // Compute the reflected velocity
-                        float3 bounceDir = changedPoint.velocity - 2 * dot(changedPoint.velocity, normal) * normal;
-                        // Ensure the bounce direction is normalized
-                        bounceDir = normalize(bounceDir);
-                        changedPoint.position = hitPoint;
-                        changedPoint.velocity = bounceDir * length(changedPoint.velocity) * (1 - bounceFrictionLoss); // Use the original velocity magnitude
-                        //merging two groups if too close 
-
-
-                    }
-
+                    
+                    /*
                     //meriging paritcles
-                    if (velDifScale < 0.2 && disTestPos < size * 1.1) {
+                    if (velDifScale < 0.4 && disTestPos < size * 1.1) {
 
                         bool whoIsBigger = true; // false = changedPoint is bigger
                         if (changedPoint.mass > testParticle.mass)
@@ -203,9 +188,10 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                             changedPoint.velocity = lerp(changedPoint.velocity, testParticle.velocity, testParticle.mass / (testParticle.mass + changedPoint.mass));
                         }
 
-                    }
+                    }*/
+
                 }
-            }
+           // }
 
 
             //caculating velociti for points that are not close together
@@ -218,29 +204,92 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         
 
     }
-	else if (id.x >= comlenghtCeil && comlenghtCeil *2 >id.x) //= comlenghtCeil && id.x< comlenghtCeil+ comLenght)
+	else if (id.x >= comlenghtCeil && id.x< comlenghtCeil+ comLenght)
 	{
         Particle particle = pointsIn[id.x - comlenghtCeil];
 
-		particleGroup particleGroup = particleGroupsIn[particle.GroupId];
-
-        if (particle.GroupId != particleGroup.id)
-        {
-            particle.position = particleGroup.position - particleGroupsIn[particleGroup.id].position;
-            particle.GroupId = particleGroup.id;
-            particleGroup = particleGroupsIn[particle.GroupId];
-        }
+        particleGroup mainParticleGroup = particleGroupsOut[particle.GroupId];
         /*
+        if (particle.GroupId != mainParticleGroup.id)
+        {
+            particle.position = mainParticleGroup.position - particleGroupsIn[mainParticleGroup.id].position;
+            particle.GroupId = mainParticleGroup.id;
+            mainParticleGroup = particleGroupsIn[particle.GroupId];
+        }
+        */
+        float3 mainPos = particle.position + mainParticleGroup.position;
+        
         for (int i = 0; i < comLenght; i++)
         {
-            if (i != id.x)
+            Particle testPoint = pointsIn[i];
+
+
+            particleGroup testGroup = particleGroupsOut[testPoint.GroupId];
+
+            if (i != id.x - comlenghtCeil && testPoint.GroupId != particle.GroupId)
             {
 
-            }
-        }*/
+                 //geting values for calculating 
+                float3 testPos = testPoint.position + testGroup.position;//inicializatinf test pos
+                float3 dirTestPos = normalize(testPos - mainPos);
+                float disTestPos = distance(mainPos, testPos);
+                float3 velDif = (testGroup.velocity - mainParticleGroup.velocity);// changedPoint.velocity is 0,0,0
+                float velDifScale = length(velDif);
+                
+                if (disTestPos < size)
+                {
+                    /*
+                    if (false)
+                    {
+                        bool whoIsBigger = true; // false = changedPoint is bigger
+                        if (mainParticleGroup.mass > testGroup.mass)
+                        {
+                            whoIsBigger = false;
+                        }
+                        else if (mainParticleGroup.mass == testGroup.mass)
+                        {
+                            if (id.x < i)
+                            {
+                                whoIsBigger = false;
+                            }
+                        }
+                        if (whoIsBigger == true)
+                        {
+                            particle.GroupId = testGroup.id;
+                            particle.position = mainParticleGroup.position - testGroup.position;
+                            mainParticleGroup.mass -= pointMass;
+                            testGroup.mass += pointMass;
+                            testGroup.velocity = lerp(mainParticleGroup.velocity, testGroup.velocity, testGroup.mass / (mainParticleGroup.mass + testGroup.mass));
 
+                            mainParticleGroup = particleGroupsIn[particle.GroupId];
+                        }
+
+                    }*/
+                   // else {
+// 
+                        // Get the exit point where the vector leaves the sphere
+                        float3 hitPoint = GetExitPoint(mainPos, velDif, testPos, size);
+                        // Compute the normal at the exit point
+                        float3 normal = normalize(hitPoint - testPos);
+                        // Compute the reflected velocity
+                        float3 bounceDir = mainParticleGroup.velocity - 2 * dot(mainParticleGroup.velocity, normal) * normal;
+                        // Ensure the bounce direction is normalized
+                        bounceDir = normalize(bounceDir);
+                        //changedPoint.position = hitPoint;
+                        float3 posChange = distance(hitPoint, testPos) * normalize(hitPoint - testPos);
+                        float3 velAdd = velDifScale * (mainParticleGroup.mass / (mainParticleGroup.mass + testGroup.mass)*2) * (1 - bounceFrictionLoss) * bounceDir;
+
+                        particleGroupsOut[id.x - comlenghtCeil].velocity+= velAdd; // Use the original velocity magnitude
+                        particleGroupsOut[id.x - comlenghtCeil].position-= posChange;
+                    //}
+                    
+                }
+             
+            }
+        }
+        //particleGroupsOut[id.x - comlenghtCeil] = mainParticleGroup;
 		pointsOut[id.x - comlenghtCeil] = particle;
-		MetrixTransforms[id.x - comlenghtCeil] = CreateTRSMatrix(particleGroup.position+particle.position, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
+		MetrixTransforms[id.x - comlenghtCeil] = CreateTRSMatrix(mainPos, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
 
     }
     

@@ -132,7 +132,7 @@ public class physics : MonoBehaviour
             physicsCom.SetFloat("frameLenght", Time.deltaTime);
             physicsCom.SetFloat("bounceFrictionLoss", bounceFrictionLoss); 
             physicsCom.SetFloat("framecalSpeedMul", framecalSpeedMul);
-            int numthreadCeil = Mathf.CeilToInt(positionsNum / NUM_THREADS);
+            int numthreadCeil = Mathf.CeilToInt((float)positionsNum / (float)NUM_THREADS);
             physicsCom.SetFloat("numthreadCeil", numthreadCeil);
             //dispatch
             physicsCom.Dispatch(mainKernel, numthreadCeil*2, 1, 1);
