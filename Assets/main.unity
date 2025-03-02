@@ -171,7 +171,7 @@ MonoBehaviour:
   bounceFrictionLoss: 0
   frameCal: 1
   framecalSpeedMul: 1
-  NUM_THREADS: 5
+  NUM_THREADS: 2
   points: []
   pointGroups: []
 --- !u!4 &799219747

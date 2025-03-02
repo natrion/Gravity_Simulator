@@ -121,6 +121,9 @@ public class physics : MonoBehaviour
         {
 
             //setting data 
+            Vector3[] debugInfs = new Vector3[100];
+            debugInfBuffer.SetData(debugInfs);
+
             pointGroupsInBuffer.SetData(pointGroups);
 
             pointsInBuffer.SetData(points);
@@ -147,6 +150,18 @@ public class physics : MonoBehaviour
 
             Matrix4x4[] pointsTRS = new Matrix4x4[positionsNum];
             outMetrixTransformBuffer.GetData(pointsTRS);
+
+            debugInfBuffer.GetData(debugInfs);
+            debugInfBuffer.SetCounterValue(0);
+            //debugkinData
+            for (int n = 0; n < debugInfs.Length; n++) if (Vector3.zero != debugInfs[n]) print(debugInfs[n]);
+
+
+
+
+
+
+            print("---------------------------------------");
             //drawing meshes
 
             if (i == frameCal-1) Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, positionsNum);
@@ -164,6 +179,8 @@ public class physics : MonoBehaviour
     ComputeBuffer pointsOutBuffer;
 
     ComputeBuffer outMetrixTransformBuffer;
+
+    ComputeBuffer debugInfBuffer;
     int mainKernel;
     int pointStructuresize;
     int pointGrupStructuresize;
@@ -181,6 +198,9 @@ public class physics : MonoBehaviour
         pointsInBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
         pointsOutBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
 
+        debugInfBuffer = new ComputeBuffer(100, sizeof(float)*3, ComputeBufferType.Append);
+        debugInfBuffer.SetCounterValue(0);
+
         outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 16);
 
         mainKernel = physicsCom.FindKernel("CSMain");
@@ -196,6 +216,8 @@ public class physics : MonoBehaviour
         physicsCom.SetBuffer(mainKernel, "pointsOut", pointsOutBuffer);
 
         physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
+
+        physicsCom.SetBuffer(mainKernel, "debugInf", debugInfBuffer);
 
     }
     void generaeOtherdata()
