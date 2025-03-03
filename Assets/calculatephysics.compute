@@ -202,7 +202,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         particleGroup mainParticleGroup = particleGroupsIn[particle.GroupId];
     
         float3 mainPos = particle.position + mainParticleGroup.position;
-        /*
+        
         for (int i = 0; i < comLenght; i++)
         {
             Particle testPoint = pointsIn[i];
@@ -270,7 +270,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 }
              
             }
-        }*/
+        }
 		pointsOut[Pid] = particle;
 		MetrixTransforms[Pid] = CreateTRSMatrix(mainPos, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
 
