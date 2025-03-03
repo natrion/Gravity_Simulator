@@ -156,13 +156,13 @@ MonoBehaviour:
   pointMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   pointMaterial: {fileID: 2100000, guid: c3de0fc030849674abc4131995ee2c53, type: 2}
   spawnSpehere: 0
-  spawnAmount: 15
+  spawnAmount: 20
   SpacePerAmount: 2
-  spawnPerCube: 0
+  spawnPerCube: 1
   perlinFreqency: 0.05
   perlinCubeLenghtPerPoint: 1.5
   sideNum: 50
-  Spawn2Points: 1
+  Spawn2Points: 0
   distanceOfTwoPoints: 1
   velocitiOfTwoPoints: 0.1
   pointSize: 0.1

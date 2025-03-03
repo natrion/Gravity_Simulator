@@ -131,6 +131,8 @@ float bounceForceMul = 1;//bounce force multipleyer
 float bounceFrictionLoss = 0.2;
 float framecalSpeedMul = 1;
 float numthreadCeil;
+
+int whatPart = 0;
 #define NUM_THREADS 2 
 
 [numthreads(NUM_THREADS,1,1)]
@@ -139,11 +141,10 @@ void CSMain (uint3 id : SV_DispatchThreadID)
 	int comLenght = pointsIn.Length;
     int comlenghtCeil = numthreadCeil * NUM_THREADS;
     float collisionDis = 0.1;
-	if (id.x < comLenght)//checks if this is still part od the distances
+	if (whatPart == 0)//checks if this is still part od the distances
     {
         if (particleGroupsIn[id.x].mass >0)
         {
-            debugInf.Append(float3((float)id.x, 0, -1));
 
             float3 mainPos = particleGroupsIn[id.x].position;//gets the position that the thred is checking
 
@@ -152,23 +153,32 @@ void CSMain (uint3 id : SV_DispatchThreadID)
             //going thrue all points to calculate forces
             for (int i = 0; i < comLenght; i++)
             {
-                if (i != id.x && i == particleGroupsIn[i].id)//only doing caculations on diferent points
+                if (i != id.x && i == particleGroupsIn[i].id && particleGroupsIn[i].mass>0)//only doing caculations on diferent points
                 {
                     
                     particleGroup testParticle = particleGroupsIn[i];
                     float3 testPos = testParticle.position;//inicializatinf test pos
 
                     //geting values for calculating 
-                    float3 dirTestPos = normalize(testPos - mainPos);
+                    float3 dirTestPos = (testPos != mainPos) ? normalize(testPos - mainPos) : float3(0, 0, 0);
                     float disTestPos = distance(mainPos, testPos);
-                    float3 velDif = (testParticle.velocity - changedPoint.velocity);// changedPoint.velocity is 0,0,0
+                    float3 velDif = testParticle.velocity - changedPoint.velocity;
                     float velDifScale = length(velDif);
                     //calculating gravity
+                    float gravityForce = (particleGroupsIn[i].mass / (disTestPos * disTestPos)) * GStrenght;
+
                     if (disTestPos >size)
                     {
-                        float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
                         changedPoint.velocity += gravityForce * dirTestPos;
                     }
+                   
+                    changedPoint.velocity += velDif *min(1, gravityForce);
+                  
+                    float pushForce = (particleGroupsIn[i].mass / (disTestPos * disTestPos* disTestPos)) * GStrenght * GStrenght;
+
+                    changedPoint.velocity += pushForce*-dirTestPos;
+                    
+
                 }
 
             }
@@ -183,25 +193,22 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         
 
     }
-	else if (id.x >= comlenghtCeil && id.x < comlenghtCeil + comLenght)
+	else if (whatPart == 1)
 	{
-        debugInf.Append(float3((float)id.x, 0, -1));
 
-        int Pid =id.x - comlenghtCeil;
+        int Pid =id.x ;
         Particle particle = pointsIn[Pid];
 
-        
-
-        particleGroup mainParticleGroup = particleGroupsOut[particle.GroupId];
+        particleGroup mainParticleGroup = particleGroupsIn[particle.GroupId];
     
         float3 mainPos = particle.position + mainParticleGroup.position;
-        
+        /*
         for (int i = 0; i < comLenght; i++)
         {
             Particle testPoint = pointsIn[i];
 
 
-            particleGroup testGroup = particleGroupsOut[testPoint.GroupId];
+            particleGroup testGroup = particleGroupsIn[testPoint.GroupId];
 
             if (i != Pid && testPoint.GroupId != particle.GroupId)
             {
@@ -216,8 +223,10 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 if (disTestPos < size)
                 {
                     
-                    if (false)//velDifScale < 0.01)
+                    if (velDifScale < 0.1)
                     {
+                        debugInf.Append(particleGroupsIn[Pid].position);
+
                         bool whoIsBigger = true; // false = changedPoint is bigger
                         if (mainParticleGroup.mass > testGroup.mass)
                         {
@@ -234,17 +243,15 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                         {
                             particle.GroupId = testGroup.id;
                             particle.position = mainParticleGroup.position - testGroup.position;
-                            mainParticleGroup.mass -= pointMass;
-                            testGroup.mass += pointMass;
-                            testGroup.velocity = lerp(mainParticleGroup.velocity, testGroup.velocity, testGroup.mass / (mainParticleGroup.mass + testGroup.mass));
+                            particleGroupsOut[Pid].mass -= pointMass;
+                            particleGroupsOut[testPoint.GroupId].mass += pointMass;
+                            particleGroupsOut[testPoint.GroupId].velocity = lerp(mainParticleGroup.velocity, testGroup.velocity, testGroup.mass / (mainParticleGroup.mass + testGroup.mass));
 
                             mainParticleGroup = particleGroupsIn[particle.GroupId];
                         }
-
                     }
                     else {
  
-
                         // Get the exit point where the vector leaves the sphere
                         float3 hitPoint = GetExitPoint(mainPos, velDif, testPos, size);
                         // Compute the normal at the exit point
@@ -255,17 +262,15 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                         bounceDir = normalize(bounceDir);
                         particleGroupsOut[Pid].position = hitPoint;
 
-                        //float3 velAdd = velDifScale * (mainParticleGroup.mass / (mainParticleGroup.mass + testGroup.mass) )*2 * (1 - bounceFrictionLoss) * bounceDir;
-                        //particleGroupsOut[Pid].velocity += velAdd;
-                        particleGroupsOut[Pid].velocity = bounceDir * length(mainParticleGroup.velocity) * (1 - bounceFrictionLoss); // Use the original velocity magnitude
-                     
+                        float3 velAdd = velDifScale * (mainParticleGroup.mass / (mainParticleGroup.mass + testGroup.mass) )*2 * (1 - bounceFrictionLoss) * velDif;
+                        particleGroupsOut[Pid].velocity += velAdd;
+                        //particleGroupsOut[Pid].velocity = bounceDir * length(mainParticleGroup.velocity) * (1 - bounceFrictionLoss); // Use the original velocity magnitude
                     }
                     
                 }
              
             }
-        }
-        //particleGroupsOut[id.x - comlenghtCeil] = mainParticleGroup;
+        }*/
 		pointsOut[Pid] = particle;
 		MetrixTransforms[Pid] = CreateTRSMatrix(mainPos, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
 

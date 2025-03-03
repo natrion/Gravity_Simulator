@@ -32,7 +32,7 @@ public class physics : MonoBehaviour
     [Range(0f, 2f)]
     [SerializeField] private float framecalSpeedMul = 1;
     [SerializeField] private int NUM_THREADS = 64;
-    [System.Serializable]
+
     struct particleGroup
     {
         public int id;
@@ -40,14 +40,13 @@ public class physics : MonoBehaviour
         public Vector3 velocity;
         public float mass;
     };
-    [System.Serializable]
     struct Particle
     {
         public int GroupId;
         public Vector3 position;
     };
-    [SerializeField] private Particle[] points;
-    [SerializeField] private particleGroup[] pointGroups;
+    private Particle[] points;
+    private particleGroup[] pointGroups;
     private Vector2Int[] groupInfs;
 
     Vector3 EulerToNormal(Vector3 eulerAngles)
@@ -137,15 +136,21 @@ public class physics : MonoBehaviour
             physicsCom.SetFloat("framecalSpeedMul", framecalSpeedMul);
             int numthreadCeil = Mathf.CeilToInt((float)positionsNum / (float)NUM_THREADS);
             physicsCom.SetFloat("numthreadCeil", numthreadCeil);
-            //dispatch
-            physicsCom.Dispatch(mainKernel, numthreadCeil*2, 1, 1);
+
+            //dispatch for pointGroups
+            physicsCom.SetInt("whatPart", 0);
+            physicsCom.Dispatch(mainKernel, numthreadCeil, 1, 1);
+
+            pointGroupsoutBuffer.GetData(pointGroups);
+            pointGroupsInBuffer.SetData(pointGroups);
+            //dispatch for points
+            physicsCom.SetInt("whatPart", 1);
+            physicsCom.Dispatch(mainKernel, numthreadCeil , 1, 1);
 
             //taking data from dispach
 
-            points = new Particle[positionsNum];
             pointsOutBuffer.GetData(points);
 
-            pointGroups = new particleGroup[positionsNum];
             pointGroupsoutBuffer.GetData(pointGroups);
 
             Matrix4x4[] pointsTRS = new Matrix4x4[positionsNum];
@@ -153,15 +158,10 @@ public class physics : MonoBehaviour
 
             debugInfBuffer.GetData(debugInfs);
             debugInfBuffer.SetCounterValue(0);
-            //debugkinData
-            for (int n = 0; n < debugInfs.Length; n++) if (Vector3.zero != debugInfs[n]) print(debugInfs[n]);
+            //debuging data
+            //for (int n = 0; n < debugInfs.Length; n++) if (Vector3.zero != debugInfs[n]) print(debugInfs[n]);
 
-
-
-
-
-
-            print("---------------------------------------");
+            //print("---------------------------------------");
             //drawing meshes
 
             if (i == frameCal-1) Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, positionsNum);
@@ -218,6 +218,10 @@ public class physics : MonoBehaviour
         physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
 
         physicsCom.SetBuffer(mainKernel, "debugInf", debugInfBuffer);
+
+        pointGroupsInBuffer.SetData(pointGroups);
+
+            pointsInBuffer.SetData(points);
 
     }
     void generaeOtherdata()
