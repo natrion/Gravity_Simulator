@@ -169,6 +169,7 @@ MonoBehaviour:
   bounceFrictionLoss: 0.2
   frameCal: 1
   framecalSpeedMul: 1
+  NUM_OF_THREADS: 128
 --- !u!4 &799219747
 Transform:
   m_ObjectHideFlags: 0

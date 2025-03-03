@@ -1,12 +1,6 @@
 #pragma kernel CSMain
 
-struct particleGroup
-{
-    int id;
-    float3 position;
-    float3 velocity;
-    float mass;
-};
+
 struct Particle
 {
     float3 position;
@@ -15,10 +9,6 @@ struct Particle
 
 RWStructuredBuffer<Particle> pointsIn;
 RWStructuredBuffer<Particle> pointsOut;
-AppendStructuredBuffer<int2> particleGroupsIn; // first one is particle second one is paricle group
-AppendStructuredBuffer<int2> particleGroupsOut; // first one is particle second one is paricle group
-AppendStructuredBuffer<particleGroup> particleGroupIn;
-AppendStructuredBuffer<particleGroup> particleGroupOut;
 RWStructuredBuffer<float4x4> MetrixTransforms;
 
 bool NormalHitsSphere(float3 normal, float3 origin, float3 spherePos, float sphereRadius, out float3 hitPos) {
@@ -128,16 +118,13 @@ float pointMass;
 float bounceForceMul = 1;//bounce force multipleyer
 float bounceFrictionLoss = 0.2;
 float framecalSpeedMul = 1;
-#define MAX_POINTS 20
-[numthreads(128,1,1)]
+#define NUM_OF_THREADS 128
+[numthreads(NUM_OF_THREADS,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
     float collisionDis = 0.1;
     if (id.x < pointsIn.Length)//checks if this is still part od the distances
     {
-        int colidedPoints[MAX_POINTS]; //array of points that are close to main point
-        int colidedPointsLenght = 0;// lenght of colidedPoints
-
         float3 mainPos = pointsIn[id.x].position;//gets the position that the thred is checking
 
         Particle changedPoint = pointsIn[id.x];
@@ -154,33 +141,19 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 float disTestPos = distance(mainPos, testPos);                 
                 float3 velDif = (testParticle.velocity - changedPoint.velocity);// changedPoint.velocity is 0,0,0
                 float velDifScale = length(velDif);
-               //adding points to all points that are clsoe to main point 
-
-                if (disTestPos < size)
-                {
-                    // Get the exit point where the vector leaves the sphere
-                    float3 hitPoint = GetExitPoint(changedPoint.position, velDif, testParticle.position, size);
-
-                    // Compute the normal at the exit point
-                    float3 normal = normalize(hitPoint - testParticle.position);
-
-                    // Compute the reflected velocity
-                    float3 bounceDir = changedPoint.velocity - 2 * dot(changedPoint.velocity, normal) * normal;
-
-                    // Ensure the bounce direction is normalized
-                    bounceDir = normalize(bounceDir);
-
-                    // Update position and velocity
-                    changedPoint.position = hitPoint;
-                    changedPoint.velocity = bounceDir * length(changedPoint.velocity)*(1- bounceFrictionLoss); // Use the original velocity magnitude
-
-                }
-
-            
-                              
+                                     
                 //calculating gravity
                 float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
-                changedPoint.velocity += gravityForce * dirTestPos;                    
+                if (disTestPos > size)
+                {
+                    changedPoint.velocity += gravityForce * dirTestPos;
+                }
+
+                changedPoint.velocity += velDif * min(1, gravityForce);
+
+                float pushForce = (pointMass / (disTestPos * disTestPos * disTestPos)) * GStrenght * GStrenght;
+
+                changedPoint.velocity += pushForce * -dirTestPos;
                 
             }
         }

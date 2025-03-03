@@ -29,21 +29,14 @@ public class physics : MonoBehaviour
     [SerializeField] private int frameCal = 1;
     [Range(0f, 2f)]
     [SerializeField] private float framecalSpeedMul = 1;
-    struct particleGroup
-    {
-        public int id;
-        public Vector3 position;
-        public Vector3 velocity;
-        public float mass;
-    };
+    [SerializeField] private int NUM_OF_THREADS = 2;
+    [System.Serializable]
     struct Particle
     {
         public Vector3 position;
         public Vector3 velocity;
     };
-    private Particle[] points;
-    private particleGroup[] pointGroups;
-    private Vector2Int[] groupInfs;
+    [SerializeField]private Particle[] points;
 
     Vector3 EulerToNormal(Vector3 eulerAngles)
     {
@@ -114,38 +107,11 @@ public class physics : MonoBehaviour
     {
         for (int i = 0; i < frameCal; i++)//repeating calculatin forfaster simulation
         {
-            //declearing buffers
-            int pointStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Particle));
-            int pointGrupStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(particleGroup));
-
-            int positionsNum = points.Length;
-
-            ComputeBuffer pointGroupsInBuffer = new ComputeBuffer(positionsNum, pointGrupStructuresize);
-            pointGroupsInBuffer.SetData(pointGroups);
-            ComputeBuffer pointGroupsoutBuffer = new ComputeBuffer(positionsNum, pointGrupStructuresize);
-
-            ComputeBuffer groupInfsInBuffer = new ComputeBuffer(positionsNum, sizeof(int)*2);
-            groupInfsInBuffer.SetData(groupInfs);
-            ComputeBuffer groupInfsoutBuffer = new ComputeBuffer(positionsNum, sizeof(int) * 2);
-
-            ComputeBuffer pointsInBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
+            //putting data to buffers
+         
             pointsInBuffer.SetData(points);
-            ComputeBuffer pointsOutBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
 
-            int mainKernel = physicsCom.FindKernel("CSMain");
             ComputeBuffer outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 16);
-
-            //seting buffers to shader
-            physicsCom.SetBuffer(mainKernel, "particleGroupsIn", groupInfsInBuffer);
-            physicsCom.SetBuffer(mainKernel, "particleGroupsOut", groupInfsoutBuffer);
-
-            physicsCom.SetBuffer(mainKernel, "particleGroupsIn", pointGroupsInBuffer);
-            physicsCom.SetBuffer(mainKernel, "particleGroupsOut", pointGroupsoutBuffer);
-
-            physicsCom.SetBuffer(mainKernel, "pointsIn", pointsInBuffer);
-            physicsCom.SetBuffer(mainKernel, "pointsOut", pointsOutBuffer);
-
-            physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
 
             //setting data for dispach
             physicsCom.SetFloat("size", pointSize);
@@ -154,6 +120,7 @@ public class physics : MonoBehaviour
             physicsCom.SetFloat("frameLenght", Time.deltaTime);
             physicsCom.SetFloat("bounceFrictionLoss", bounceFrictionLoss); 
             physicsCom.SetFloat("framecalSpeedMul", framecalSpeedMul);
+            physicsCom.SetFloat("NUM_OF_THREADS", NUM_OF_THREADS);
 
             //dispatch
             physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 128f), 1, 1);
@@ -161,10 +128,7 @@ public class physics : MonoBehaviour
             //taking data from dispach
             points = new Particle[positionsNum];
             pointsOutBuffer.GetData(points);
-            pointsOutBuffer.Release();
-            Matrix4x4[] pointsTRS = new Matrix4x4[positionsNum];
             outMetrixTransformBuffer.GetData(pointsTRS);
-            outMetrixTransformBuffer.Release();
             //drawing meshes
 
             if (i == frameCal-1) Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, positionsNum);
@@ -172,26 +136,45 @@ public class physics : MonoBehaviour
 
         
     }
-    void generaeOtherdata()
+    ComputeBuffer pointsInBuffer;
+    ComputeBuffer pointsOutBuffer;
+    ComputeBuffer outMetrixTransformBuffer;
+    Matrix4x4[] pointsTRS ;
+
+    int positionsNum ;
+    int mainKernel;
+
+
+    void generateBufferes()
     {
-        pointGroups = new particleGroup[points.Length];
-        groupInfs = new Vector2Int[points.Length];
-        for (int i = 0; i < points.Length; i++)
-        {
-            Particle Particle = points[i];
+        positionsNum = points.Length;
+        mainKernel = physicsCom.FindKernel("CSMain");
+        int pointStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Particle));
 
-            particleGroup pointGroup = new particleGroup();
-            pointGroup.id = i;
-            pointGroup.position = Particle.position;
-            pointGroup.velocity = Particle.velocity;
-            pointGroup.mass = pointMass;
+        pointsTRS = new Matrix4x4[positionsNum];
+        //declearing buffers
 
-            groupInfs[i] =  new Vector2Int(i,i);
+        pointsInBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
+        pointsOutBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
 
-        }     
-        
-            
-               
+        outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 16);
+
+        //seting buffers to shader
+
+        physicsCom.SetBuffer(mainKernel, "pointsIn", pointsInBuffer);
+        physicsCom.SetBuffer(mainKernel, "pointsOut", pointsOutBuffer);
+
+        physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
+        /*
+        //setting data for dispach
+        physicsCom.SetFloat("size", pointSize);
+        physicsCom.SetFloat("GStrenght", GStrenght);
+        physicsCom.SetFloat("pointMass", pointMass);
+        physicsCom.SetFloat("frameLenght", Time.deltaTime);
+        physicsCom.SetFloat("bounceFrictionLoss", bounceFrictionLoss);
+        physicsCom.SetFloat("framecalSpeedMul", framecalSpeedMul);
+        */
+       
     }
     bool done = false;
     void Start()
@@ -202,7 +185,8 @@ public class physics : MonoBehaviour
 
         if(Spawn2Points == true) spawnTwoPoints();
 
-        generaeOtherdata();
+        generateBufferes();
+
         done = true;
     }
     void Update()
