@@ -21,22 +21,23 @@ public class physics : MonoBehaviour
     [SerializeField] private bool Spawn2Points;
     [Header("physics")]
     [SerializeField] private float pointSize = 0.1f;
-    [SerializeField] private float pointMass = 1;
+    [SerializeField] private float pointMass = 0.1f;
+    [SerializeField] private float pushStrenght = 0.001f;
+    [SerializeField] private float frictionStrenght = 1;
     [SerializeField] private float GStrenght = 1;
-    [Range(0, 1f)]
-    [SerializeField] private float bounceFrictionLoss = 1;
     [Header("simulation")]
     [SerializeField] private int frameCal = 1;
     [Range(0f, 2f)]
     [SerializeField] private float framecalSpeedMul = 1;
     [SerializeField] private int NUM_OF_THREADS = 2;
-    [System.Serializable]
+    //[System.Serializable]
     struct Particle
     {
         public Vector3 position;
         public Vector3 velocity;
     };
-    [SerializeField]private Particle[] points;
+    //[SerializeField]
+    private Particle[] points;
 
     Vector3 EulerToNormal(Vector3 eulerAngles)
     {
@@ -79,7 +80,7 @@ public class physics : MonoBehaviour
                         Particle newpoint = new Particle();
                         float maxPosVar = Mathf.Max(0, perlinCubeLenghtPerPoint - pointSize);
                         newpoint.position = pos+ new Vector3(Random.RandomRange(-maxPosVar, maxPosVar), Random.RandomRange(-maxPosVar, maxPosVar), Random.RandomRange(-maxPosVar, maxPosVar));
-                        newpoint.velocity = Random.onUnitSphere * Random.RandomRange(0, 1f);
+                        //newpoint.velocity = Random.onUnitSphere * Random.RandomRange(0, 1f);
                         pointsList.Add(newpoint);
                     }
                 }
@@ -111,16 +112,18 @@ public class physics : MonoBehaviour
          
             pointsInBuffer.SetData(points);
 
-            ComputeBuffer outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 16);
-
             //setting data for dispach
             physicsCom.SetFloat("size", pointSize);
-            physicsCom.SetFloat("GStrenght", GStrenght);
             physicsCom.SetFloat("pointMass", pointMass);
-            physicsCom.SetFloat("frameLenght", Time.deltaTime);
-            physicsCom.SetFloat("bounceFrictionLoss", bounceFrictionLoss); 
+
+            physicsCom.SetFloat("GStrenght", GStrenght); 
+            physicsCom.SetFloat("pushStrenght", pushStrenght);
+            physicsCom.SetFloat("frictionStrenght", frictionStrenght);
+
             physicsCom.SetFloat("framecalSpeedMul", framecalSpeedMul);
+
             physicsCom.SetFloat("NUM_OF_THREADS", NUM_OF_THREADS);
+            physicsCom.SetFloat("frameLenght", Time.deltaTime);
 
             //dispatch
             physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 128f), 1, 1);

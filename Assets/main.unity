@@ -155,21 +155,22 @@ MonoBehaviour:
   physicsCom: {fileID: 7200000, guid: 385bea974c5300e4fa24e86e52b5d849, type: 3}
   pointMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   pointMaterial: {fileID: 2100000, guid: c3de0fc030849674abc4131995ee2c53, type: 2}
-  spawnSpehere: 1
-  spawnAmount: 15
+  spawnSpehere: 0
+  spawnAmount: 200
   SpacePerAmount: 2
-  spawnPerCube: 0
-  perlinFreqency: 0.05
+  spawnPerCube: 1
+  perlinFreqency: 0.1
   perlinCubeLenghtPerPoint: 1.5
-  sideNum: 50
+  sideNum: 100
   Spawn2Points: 0
   pointSize: 0.1
   pointMass: 0.01
+  pushStrenght: 0.00000001
+  frictionStrenght: 0.001
   GStrenght: 0.03
-  bounceFrictionLoss: 0.2
   frameCal: 1
   framecalSpeedMul: 1
-  NUM_OF_THREADS: 128
+  NUM_OF_THREADS: 256
 --- !u!4 &799219747
 Transform:
   m_ObjectHideFlags: 0

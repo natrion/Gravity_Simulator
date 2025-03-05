@@ -113,10 +113,10 @@ float3 CalculateBounceDirection(float3 hitPoint, float3 lightDir, float3 sphereC
 
 float frameLenght;
 float GStrenght;
+float frictionStrenght;
+float pushStrenght;
 float size;
 float pointMass;
-float bounceForceMul = 1;//bounce force multipleyer
-float bounceFrictionLoss = 0.2;
 float framecalSpeedMul = 1;
 #define NUM_OF_THREADS 128
 [numthreads(NUM_OF_THREADS,1,1)]
@@ -137,24 +137,34 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 Particle testParticle = pointsIn[i];
                 float3 testPos = testParticle.position;//inicializatinf test pos
                 //geting values for calculating 
-                float3 dirTestPos = normalize(testPos - mainPos);
-                float disTestPos = distance(mainPos, testPos);                 
-                float3 velDif = (testParticle.velocity - changedPoint.velocity);// changedPoint.velocity is 0,0,0
-                float velDifScale = length(velDif);
-                                     
-                //calculating gravity
-                float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
-                if (disTestPos > size)
+                float3 dirTestPos = (testPos != mainPos) ? normalize(testPos - mainPos) : float3(0, 0, 0);
+                float disTestPos = distance(mainPos, testPos);
+             
+               
+                if (disTestPos > 0.00001)
                 {
-                    changedPoint.velocity += gravityForce * dirTestPos;
+
+                    //geting values for calculating 
+                    float3 velDif =  pointsIn[id.x].velocity -  testParticle.velocity ;
+                    float velDifScale = length(velDif);
+                    //calculating frictionForce
+                    float frictionForce = (velDifScale / disTestPos) * frictionStrenght;
+                    changedPoint.velocity -= velDif * min(1, frictionForce);
+
+                    //calculating gravity
+                    if (disTestPos > size)
+                    {
+                        float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
+                        changedPoint.velocity += gravityForce * dirTestPos;
+                    }
+                    //calculating pushforce
+                    float pushForce = (1 / pow(disTestPos, 8))* pushStrenght;
+                    changedPoint.velocity += pushForce * -dirTestPos;
+                    
                 }
-
-                changedPoint.velocity += velDif * min(1, gravityForce);
-
-                float pushForce = (pointMass / (disTestPos * disTestPos * disTestPos)) * GStrenght * GStrenght;
-
-                changedPoint.velocity += pushForce * -dirTestPos;
                 
+                
+ 
             }
         }
 
