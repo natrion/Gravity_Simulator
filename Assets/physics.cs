@@ -27,7 +27,7 @@ public class physics : MonoBehaviour
     [SerializeField] private float GStrenght = 1;
     [Header("simulation")]
     [SerializeField] private int frameCal = 1;
-    [Range(0f, 2f)]
+    [Range(0f, 5f)]
     [SerializeField] private float framecalSpeedMul = 1;
     [SerializeField] private int NUM_OF_THREADS = 2;
     //[System.Serializable]

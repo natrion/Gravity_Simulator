@@ -161,11 +161,11 @@ MonoBehaviour:
   spawnPerCube: 1
   perlinFreqency: 0.1
   perlinCubeLenghtPerPoint: 1.5
-  sideNum: 100
+  sideNum: 50
   Spawn2Points: 0
   pointSize: 0.1
   pointMass: 0.01
-  pushStrenght: 0.00000001
+  pushStrenght: 0.00001
   frictionStrenght: 0.001
   GStrenght: 0.03
   frameCal: 1
