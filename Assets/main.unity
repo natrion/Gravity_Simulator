@@ -165,12 +165,12 @@ MonoBehaviour:
   Spawn2Points: 0
   pointSize: 0.1
   pointMass: 0.01
-  pushStrenght: 0.00001
-  frictionStrenght: 0.001
+  pushStrenght: 0.0001
+  frictionStrenght: 0.0001
   GStrenght: 0.03
   frameCal: 1
-  framecalSpeedMul: 1
-  NUM_OF_THREADS: 256
+  framecalSpeedMul: 5
+  NUM_OF_THREADS: 1028
 --- !u!4 &799219747
 Transform:
   m_ObjectHideFlags: 0

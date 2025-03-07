@@ -110,9 +110,7 @@ float3 CalculateBounceDirection(float3 hitPoint, float3 lightDir, float3 sphereC
     return lightDir - 2.0 * dot(lightDir, normal) * normal;
 
 }
-float clampToHightFloat3(float3 input) {
-    return input; //clamp(input, float3(-10000, -10000, -10000), float3(10000, 10000, 10000));
-}
+
 float frameLenght;
 float GStrenght;
 float frictionStrenght;
@@ -120,6 +118,11 @@ float pushStrenght;
 float size;
 float pointMass;
 float framecalSpeedMul = 1;
+
+float3 clampToHightFloat3(float3 input) {
+    return clamp(input, float3(-100, -100, -100), float3(100, 100, 100));
+}
+
 #define NUM_OF_THREADS 128
 [numthreads(NUM_OF_THREADS,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
@@ -146,21 +149,25 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                 {
 
                     //geting values for calculating 
-                    float3 dirTestPos = (testPos != mainPos) ? normalize(testPos - mainPos) : float3(0, 0, 0);
+                    float3 dirTestPos = normalize(testPos - mainPos) ;
+
                     float3 velDif =  pointsIn[id.x].velocity -  testParticle.velocity ;
                     float velDifScale = length(velDif);
                     //calculating frictionForce
-                    float frictionForce = (disTestPos > 0.0001) ? (velDifScale / disTestPos) * frictionStrenght : 0;
+                    float frictionForce = (velDifScale / pow(disTestPos,1)) * frictionStrenght;
                     changedPoint.velocity -= clampToHightFloat3(velDif * min(1, frictionForce));
 
                     //calculating gravity
                     if (disTestPos > size)
                     {
-                        float gravityForce = (disTestPos > 0.0001) ? (pointMass / (disTestPos * disTestPos)) * GStrenght : 0;
+                        float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
                         changedPoint.velocity += clampToHightFloat3(gravityForce * dirTestPos);
                     }
+
+                    velDif = changedPoint.velocity - testParticle.velocity;
+                    velDifScale = length(velDif);
                     //calculating pushforce
-                    float pushForce = (1 / max(pow(disTestPos, 4), 0.001)) * pushStrenght;
+                    float pushForce = (1 / max(pow(max(disTestPos,size), 3),0.0001))* pushStrenght * velDifScale;
                     changedPoint.velocity += clampToHightFloat3(pushForce * -dirTestPos);
                     
                 }
@@ -172,8 +179,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
 
        
         //caculating velociti for points that are not close together
-        float3 disTochange = min(frameLenght,1000) * changedPoint.velocity * framecalSpeedMul;
-
+        float3 disTochange = min(5,frameLenght) * changedPoint.velocity * framecalSpeedMul;
         changedPoint.position += clampToHightFloat3(disTochange);
 
         //apling buffers
