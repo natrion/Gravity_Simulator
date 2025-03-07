@@ -164,11 +164,11 @@ void CSMain (uint3 id : SV_DispatchThreadID)
                         changedPoint.velocity += clampToHightFloat3(gravityForce * dirTestPos);
                     }
 
-                    velDif = changedPoint.velocity - testParticle.velocity;
+                    velDif = testParticle.velocity  - changedPoint.velocity;
                     velDifScale = length(velDif);
                     //calculating pushforce
-                    float pushForce = (1 / max(pow(max(disTestPos,size), 3),0.0001))* pushStrenght * velDifScale;
-                    changedPoint.velocity += clampToHightFloat3(pushForce * -dirTestPos);
+                    float pushForce = (1 / max(pow(max(disTestPos,size), 3),0.0001))* pushStrenght ;
+                    changedPoint.velocity += clampToHightFloat3(pushForce * - dirTestPos );
                     
                 }
                 

@@ -166,7 +166,7 @@ MonoBehaviour:
   pointSize: 0.1
   pointMass: 0.01
   pushStrenght: 0.0001
-  frictionStrenght: 0.0001
+  frictionStrenght: 0.00001
   GStrenght: 0.03
   frameCal: 1
   framecalSpeedMul: 5
