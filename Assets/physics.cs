@@ -8,6 +8,11 @@ public class physics : MonoBehaviour
     [SerializeField] private ComputeShader physicsCom;
     [SerializeField] private Mesh pointMesh;
     [SerializeField] private Material pointMaterial;
+    [SerializeField] private int NUM_OF_THREADS = 256;
+    [SerializeField] private int chunkSideDividingNum = 2;
+    [SerializeField] private float smallestChunkSize = 5;
+    [SerializeField] private int smallestChunkMaxPointsNum = 1250;
+    [SerializeField] private float chunkArea = 1000;
     [Header("Spawning Points Sphere")]
     [SerializeField] private bool spawnSpehere;
     [SerializeField] private int spawnAmount = 20;
@@ -29,12 +34,20 @@ public class physics : MonoBehaviour
     [SerializeField] private int frameCal = 1;
     [Range(0f, 5f)]
     [SerializeField] private float framecalSpeedMul = 1;
-    [SerializeField] private int NUM_OF_THREADS = 2;
     //[System.Serializable]
     struct Particle
     {
         public Vector3 position;
         public Vector3 velocity;
+    };
+    struct Chunk
+    {
+        public Vector3 position;
+        public float mass;
+        public int numofPoints;
+        public int iteration;
+
+        public int pointGroupId;
     };
     //[SerializeField]
     private Particle[] points;
@@ -151,7 +164,7 @@ public class physics : MonoBehaviour
     void generateBufferes()
     {
         positionsNum = points.Length;
-        mainKernel = physicsCom.FindKernel("CSMain");
+        mainKernel = physicsCom.FindKernel("pointCal");
         int pointStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Particle));
 
         pointsTRS = new Matrix4x4[positionsNum];
@@ -179,7 +192,109 @@ public class physics : MonoBehaviour
         */
        
     }
+    int numOfSmalestChunks = 0;
+    void makeSubChunks(int chunkId, ref List<Chunk> chunks )
+    {
+        Chunk chunk = chunks[chunkId];
+
+        List<Chunk> subChunks = new List<Chunk>();
+        float chunkSize = chunkArea / Mathf.Pow(chunkSideDividingNum, chunk.iteration+1);
+        if (chunkSize < smallestChunkSize) return;
+        
+        for (float x = chunkSize * -0.5f; x < chunkSize*0.5f; x+= chunkSize/ chunkSideDividingNum)
+        {
+            for (float y = chunkSize * -0.5f; y < chunkSize * 0.5f; y+= chunkSideDividingNum)
+            {
+                for (float z = chunkSize * -0.5f; z < chunkSize * 0.5f; z+= chunkSideDividingNum)
+                {
+                    Chunk subChunk = new Chunk();
+                    subChunk.position = chunk.position += new Vector3(x, y, z);
+                    subChunk.iteration = chunk.iteration-1;
+                    subChunk.mass = 0;
+                    subChunk.numofPoints = 0;
+
+                    subChunks.Add(subChunk);
+                    int subChunkId = chunkId + subChunks.Count;
+                    if (subChunk.iteration == 0) {
+                        subChunk.pointGroupId = numOfSmalestChunks;
+                        numOfSmalestChunks++;
+                    }
+                    makeSubChunks(subChunkId, ref subChunks);
+                }
+            }
+        }
+        chunks.InsertRange(chunkId + 1, subChunks);
+    }
+    int[,,] subChunkLookupTable ;
+
+    
+    void prepareOtherData()
+    {
+        float chunkAreaCheck = smallestChunkSize;
+        int maxIteration = 0;
+        while (chunkAreaCheck * chunkSideDividingNum < chunkArea)
+        {
+            chunkAreaCheck *= chunkSideDividingNum;
+            maxIteration++;
+        }
+        chunkArea = chunkAreaCheck;
+
+        List<Chunk> chunks = new List<Chunk>();
+        Chunk chunk = new Chunk();
+        chunk.iteration = maxIteration;
+        chunk.position = Vector3.zero;
+        chunk.mass = 0;
+        chunk.numofPoints = 0;
+        numOfSmalestChunks = 0;
+        makeSubChunks(0, ref chunks);
+
+        Chunk[] chunksArray = new Chunk[chunks.Count];
+        int[,] ChunksGroupPointers = new int[Mathf.RoundToInt(chunkArea / smallestChunkMaxPointsNum), 20];
+
+        for (int i = 0; i < chunksArray.Length; i++)chunksArray[i] = chunks[i];
+        
+
+        subChunkLookupTable = new int[chunkSideDividingNum, chunkSideDividingNum, chunkSideDividingNum];
+        int lookUpSetupI = 0;
+        for (int x = 0; x < chunkSideDividingNum ; x++)
+        {
+            for (int y = 0; y < chunkSideDividingNum ; y++)
+            {
+                for (int z = 0; z < chunkSideDividingNum; z ++)
+                {
+                    subChunkLookupTable[chunkSideDividingNum, chunkSideDividingNum, chunkSideDividingNum] = lookUpSetupI;
+                    lookUpSetupI++;
+                }
+            }
+        }
+        int pointId = 0;
+        foreach (Particle point in points)
+        {
+            int testSizeToOtherSubChunk = (chunks.Count - 1) / chunkSideDividingNum;
+            float testingChunkSize = chunkAreaCheck;
+            Vector3 position = point.position;
+            Vector3 testPos = Vector3.zero;
+            int finalId  = 0;
+            for (int i = 0; i < maxIteration; i++)
+            {
+                Vector3 locTestpos = (position - testPos + new Vector3(testingChunkSize, testingChunkSize, testingChunkSize)/2) / (testingChunkSize / chunkSideDividingNum);// new Vector3Int[Mathf.RoundToInt() + testingChunkSize/2, Mathf.RoundToInt(position.y - testPos.y), Mathf.RoundToInt(position.z - testPos.z)
+                locTestpos = new Vector3(Mathf.Round(locTestpos.x), Mathf.Round(locTestpos.y), Mathf.Round(locTestpos.z)) * (testingChunkSize / chunkSideDividingNum);
+
+                int subChunkId = subChunkLookupTable[(int)locTestpos.x, (int)locTestpos.y, (int)locTestpos.z];
+
+                finalId += subChunkId * testSizeToOtherSubChunk;
+                testPos = locTestpos;
+                testSizeToOtherSubChunk /= chunkSideDividingNum;
+                testingChunkSize /= chunkSideDividingNum;
+            }
+            chunksArray[finalId].numofPoints ++;
+            chunksArray[finalId].mass += pointMass;
+            ChunksGroupPointers[chunksArray[finalId].pointGroupId, chunksArray[finalId].numofPoints] = pointId;
+            pointId++;
+        }
+    }
     bool done = false;
+
     void Start()
     {
         if(spawnPerCube == true) SpawnPelinCube();
@@ -189,6 +304,7 @@ public class physics : MonoBehaviour
         if(Spawn2Points == true) spawnTwoPoints();
 
         generateBufferes();
+        prepareOtherData();
 
         done = true;
     }

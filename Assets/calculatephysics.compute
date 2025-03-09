@@ -1,4 +1,4 @@
-#pragma kernel CSMain
+#pragma kernel pointCal
 
 
 struct Particle
@@ -6,6 +6,25 @@ struct Particle
     float3 position;
     float3 velocity;
 };
+struct Chunk {
+    float3 position;
+    float mass;
+    int numofPoints;
+
+    int pointId;
+};
+#define CHUNK_POINT_GROUP_SIZE 20
+
+struct SubChunkLookupTable
+{
+    int data[CHUNK_POINT_GROUP_SIZE][CHUNK_POINT_GROUP_SIZE][CHUNK_POINT_GROUP_SIZE];
+};
+struct ChunkPointData { int points[CHUNK_POINT_GROUP_SIZE]; };
+
+RWStructuredBuffer<ChunkPointData> ChunksGroupPointers;
+RWStructuredBuffer<SubChunkLookupTable> subChunkLookupTable;
+
+RWStructuredBuffer<Chunk> Chunks;
 
 RWStructuredBuffer<Particle> pointsIn;
 RWStructuredBuffer<Particle> pointsOut;
@@ -119,13 +138,15 @@ float size;
 float pointMass;
 float framecalSpeedMul = 1;
 
+
+
 float3 clampToHightFloat3(float3 input) {
     return clamp(input, float3(-100, -100, -100), float3(100, 100, 100));
 }
 
 #define NUM_OF_THREADS 128
 [numthreads(NUM_OF_THREADS,1,1)]
-void CSMain (uint3 id : SV_DispatchThreadID)
+void pointCal (uint3 id : SV_DispatchThreadID)
 {
     float collisionDis = 0.1;
     if (id.x < pointsIn.Length)//checks if this is still part od the distances
@@ -189,3 +210,9 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     }
     
 }
+/*
+[numthreads(NUM_OF_THREADS, 1, 1)]
+void PrepareChunks(uint3 id : SV_DispatchThreadID)
+{   
+
+}*/
