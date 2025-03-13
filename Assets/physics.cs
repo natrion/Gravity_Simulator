@@ -10,7 +10,7 @@ public class physics : MonoBehaviour
     [SerializeField] private Material pointMaterial;
     [SerializeField] private int NUM_OF_THREADS = 256;
     [SerializeField] private int chunkSideDividingNum = 2;
-    [SerializeField] private float smallestChunkSize = 5;
+    [SerializeField] private float chunkPointGroupsNum = 5;
     [SerializeField] private int smallestChunkMaxPointsNum = 1250;
     [SerializeField] private float chunkArea = 1000;
     [Header("Spawning Points Sphere")]
@@ -43,11 +43,16 @@ public class physics : MonoBehaviour
     struct Chunk
     {
         public Vector3 position;
+
         public float mass;
-        public int numofPoints;
         public int iteration;
+        public int parent;
+        public int[] children;
+        public float size;
 
         public int pointGroupId;
+        public int numofPoints;
+
     };
     //[SerializeField]
     private Particle[] points;
@@ -193,67 +198,90 @@ public class physics : MonoBehaviour
        
     }
     int numOfSmalestChunks = 0;
-    void makeSubChunks(int chunkId, ref List<Chunk> chunks )
+    void makeSubChunks(int chunkId, ref List<Chunk> chunks )//function that makes sub chunks insade of subchanks... until it makes all chunks needed
     {
-        Chunk chunk = chunks[chunkId];
-
-        List<Chunk> subChunks = new List<Chunk>();
-        float chunkSize = chunkArea / Mathf.Pow(chunkSideDividingNum, chunk.iteration+1);
-        if (chunkSize < smallestChunkSize) return;
         
-        for (float x = chunkSize * -0.5f; x < chunkSize*0.5f; x+= chunkSize/ chunkSideDividingNum)
+        Chunk chunk = chunks[chunkId];
+        //show cube cisuals visuals
+        GameObject showCubeInstance = Instantiate(showCube);
+        showCubeInstance.transform.position = chunk.position;
+        showCubeInstance.transform.localScale = Vector3.one * chunk.size;
+
+        if (chunk.iteration == 0) return;//not making sub chanjks when on the smallest chunks
+
+        
+        float chunkSize = chunk.size;
+
+        chunk.children = new int[chunkSideDividingNum * chunkSideDividingNum * chunkSideDividingNum];
+        int i = 0;
+        //making all subchanks
+        for (float x = chunkSize * -0.5f; x < chunkSize*0.5f; x+= chunkSize/chunkSideDividingNum)
         {
-            for (float y = chunkSize * -0.5f; y < chunkSize * 0.5f; y+= chunkSideDividingNum)
+            for (float y = chunkSize * -0.5f; y < chunkSize * 0.5f; y+= chunkSize / chunkSideDividingNum)
             {
-                for (float z = chunkSize * -0.5f; z < chunkSize * 0.5f; z+= chunkSideDividingNum)
+                for (float z = chunkSize * -0.5f; z < chunkSize * 0.5f; z+= chunkSize / chunkSideDividingNum)
                 {
+                    
                     Chunk subChunk = new Chunk();
                     subChunk.position = chunk.position += new Vector3(x, y, z);
                     subChunk.iteration = chunk.iteration-1;
                     subChunk.mass = 0;
                     subChunk.numofPoints = 0;
+                    subChunk.parent = chunkId;
+                    subChunk.size = chunkSize / (float)chunkSideDividingNum;
 
-                    subChunks.Add(subChunk);
-                    int subChunkId = chunkId + subChunks.Count;
+                    chunks.Add(subChunk);
+
+                    int subChunkId = chunks.Count -1;
+                    chunk.children[i] = subChunkId;
                     if (subChunk.iteration == 0) {
                         subChunk.pointGroupId = numOfSmalestChunks;
                         numOfSmalestChunks++;
+                        subChunk.children = new int[4];
                     }
-                    makeSubChunks(subChunkId, ref subChunks);
+                    makeSubChunks(subChunkId, ref chunks);
+                    i++;
                 }
             }
         }
-        chunks.InsertRange(chunkId + 1, subChunks);
+        chunks[chunkId] = chunk;
     }
     int[,,] subChunkLookupTable ;
 
-    
+    [SerializeField]private GameObject showCube;
     void prepareOtherData()
     {
-        float chunkAreaCheck = smallestChunkSize;
+        //calculating the actual chunk area becose it needs to be a some number of powesr of smallestChunkSize powerd by chunkSideDividingNum 
+        float chunkAreaCheck = chunkPointGroupsNum;
         int maxIteration = 0;
-        while (chunkAreaCheck * chunkSideDividingNum < chunkArea)
+        while (chunkAreaCheck < chunkArea)
         {
             chunkAreaCheck *= chunkSideDividingNum;
             maxIteration++;
         }
         chunkArea = chunkAreaCheck;
-
+        //making the bigest parent chunk 
         List<Chunk> chunks = new List<Chunk>();
+
         Chunk chunk = new Chunk();
         chunk.iteration = maxIteration;
         chunk.position = Vector3.zero;
         chunk.mass = 0;
         chunk.numofPoints = 0;
+        chunk.size = chunkArea;
         numOfSmalestChunks = 0;
+        chunks.Add(chunk);
+        //making all chunks insade that chunk
         makeSubChunks(0, ref chunks);
 
+        //convering chunk list to chunk array
         Chunk[] chunksArray = new Chunk[chunks.Count];
-        int[,] ChunksGroupPointers = new int[Mathf.RoundToInt(chunkArea / smallestChunkMaxPointsNum), 20];
-
         for (int i = 0; i < chunksArray.Length; i++)chunksArray[i] = chunks[i];
-        
 
+        //decleration of groups of paritivles 
+        int[,] ChunksGroupPointers = new int[Mathf.RoundToInt(chunkArea / smallestChunkMaxPointsNum), 20];// the chunks at teh lowest level point to these groups of paritivles 
+
+        //making the look up table that will be used to tell in whath inedex the chuck you want to find is in 
         subChunkLookupTable = new int[chunkSideDividingNum, chunkSideDividingNum, chunkSideDividingNum];
         int lookUpSetupI = 0;
         for (int x = 0; x < chunkSideDividingNum ; x++)
@@ -262,11 +290,12 @@ public class physics : MonoBehaviour
             {
                 for (int z = 0; z < chunkSideDividingNum; z ++)
                 {
-                    subChunkLookupTable[chunkSideDividingNum, chunkSideDividingNum, chunkSideDividingNum] = lookUpSetupI;
+                    subChunkLookupTable[x, y, z] = lookUpSetupI;
                     lookUpSetupI++;
                 }
             }
         }
+        //soritng particle in to there respective chunks
         int pointId = 0;
         foreach (Particle point in points)
         {
