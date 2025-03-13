@@ -10,8 +10,8 @@ public class physics : MonoBehaviour
     [SerializeField] private Material pointMaterial;
     [SerializeField] private int NUM_OF_THREADS = 256;
     [SerializeField] private int chunkSideDividingNum = 2;
-    [SerializeField] private float chunkPointGroupsNum = 5;
-    [SerializeField] private int smallestChunkMaxPointsNum = 1250;
+    [SerializeField] private float smalestChunksSize = 5;
+    [SerializeField] private int chunkPointGroupsNum = 1250;
     [SerializeField] private float chunkArea = 1000;
     [Header("Spawning Points Sphere")]
     [SerializeField] private bool spawnSpehere;
@@ -206,10 +206,11 @@ public class physics : MonoBehaviour
         GameObject showCubeInstance = Instantiate(showCube);
         showCubeInstance.transform.position = chunk.position;
         showCubeInstance.transform.localScale = Vector3.one * chunk.size;
+        showCubeInstance.SetActive(false);
 
-        if (chunk.iteration == 0) return;//not making sub chanjks when on the smallest chunks
+        if (chunk.iteration < 0) return;//not making sub chanjks when on the smallest chunks
 
-        
+
         float chunkSize = chunk.size;
         float subChunkSize = (float)chunkSize / (float)chunkSideDividingNum;
         float chunkStartPos = chunkSize * 0.5f - subChunkSize / 2;
@@ -225,7 +226,7 @@ public class physics : MonoBehaviour
                 {
                     
                     Chunk subChunk = new Chunk();
-                    subChunk.position = chunk.position += new Vector3(x, y, z)* subChunkSize -(Vector3.one* chunkSize)/2 + (Vector3.one * subChunkSize)/2;
+                    subChunk.position = chunk.position + new Vector3(x, y, z)* subChunkSize -(Vector3.one* chunkSize)/2 + (Vector3.one * subChunkSize)/2;
                     subChunk.iteration = chunk.iteration-1;
                     subChunk.mass = 0;
                     subChunk.numofPoints = 0;
@@ -254,7 +255,7 @@ public class physics : MonoBehaviour
     void prepareOtherData()
     {
         //calculating the actual chunk area becose it needs to be a some number of powesr of smallestChunkSize powerd by chunkSideDividingNum 
-        float chunkAreaCheck = chunkPointGroupsNum;
+        float chunkAreaCheck = smalestChunksSize;
         int maxIteration = 0;
         while (chunkAreaCheck < chunkArea)
         {
@@ -281,7 +282,7 @@ public class physics : MonoBehaviour
         for (int i = 0; i < chunksArray.Length; i++)chunksArray[i] = chunks[i];
 
         //decleration of groups of paritivles 
-        int[,] ChunksGroupPointers = new int[Mathf.RoundToInt(chunkArea / smallestChunkMaxPointsNum), 20];// the chunks at teh lowest level point to these groups of paritivles 
+        int[,] ChunksGroupPointers = new int[Mathf.RoundToInt(chunkArea / chunkPointGroupsNum), 20];// the chunks at teh lowest level point to these groups of paritivles 
 
         //making the look up table that will be used to tell in whath inedex the chuck you want to find is in 
         subChunkLookupTable = new int[chunkSideDividingNum, chunkSideDividingNum, chunkSideDividingNum];
@@ -298,6 +299,7 @@ public class physics : MonoBehaviour
             }
         }
         //soritng particle in to there respective chunks
+        /*
         int pointId = 0;
         foreach (Particle point in points)
         {
@@ -322,7 +324,7 @@ public class physics : MonoBehaviour
             chunksArray[finalId].mass += pointMass;
             ChunksGroupPointers[chunksArray[finalId].pointGroupId, chunksArray[finalId].numofPoints] = pointId;
             pointId++;
-        }
+        }*/
     }
     bool done = false;
 
@@ -341,6 +343,6 @@ public class physics : MonoBehaviour
     }
     void Update()
     {
-        if(done == true)visualizatePositions();
+       // if(done == true)visualizatePositions();
     }
 }
