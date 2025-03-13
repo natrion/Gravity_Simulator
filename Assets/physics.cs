@@ -211,19 +211,21 @@ public class physics : MonoBehaviour
 
         
         float chunkSize = chunk.size;
+        float subChunkSize = (float)chunkSize / (float)chunkSideDividingNum;
+        float chunkStartPos = chunkSize * 0.5f - subChunkSize / 2;
 
         chunk.children = new int[chunkSideDividingNum * chunkSideDividingNum * chunkSideDividingNum];
         int i = 0;
         //making all subchanks
-        for (float x = chunkSize * -0.5f; x < chunkSize*0.5f; x+= chunkSize/chunkSideDividingNum)
+        for (float x = 0; x < chunkSideDividingNum; x++)
         {
-            for (float y = chunkSize * -0.5f; y < chunkSize * 0.5f; y+= chunkSize / chunkSideDividingNum)
+            for (float y =0 ; y < chunkSideDividingNum; y++)
             {
-                for (float z = chunkSize * -0.5f; z < chunkSize * 0.5f; z+= chunkSize / chunkSideDividingNum)
+                for (float z = 0; z < chunkSideDividingNum; z++)
                 {
                     
                     Chunk subChunk = new Chunk();
-                    subChunk.position = chunk.position += new Vector3(x, y, z);
+                    subChunk.position = chunk.position += new Vector3(x, y, z)* subChunkSize -(Vector3.one* chunkSize)/2 + (Vector3.one * subChunkSize)/2;
                     subChunk.iteration = chunk.iteration-1;
                     subChunk.mass = 0;
                     subChunk.numofPoints = 0;
