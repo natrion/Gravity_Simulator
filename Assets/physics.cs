@@ -203,17 +203,18 @@ public class physics : MonoBehaviour
         
         Chunk chunk = chunks[chunkId];
         //show cube cisuals visuals
+        /*
         GameObject showCubeInstance = Instantiate(showCube);
         showCubeInstance.transform.position = chunk.position;
         showCubeInstance.transform.localScale = Vector3.one * chunk.size;
         showCubeInstance.SetActive(false);
+        */
 
         if (chunk.iteration < 0) return;//not making sub chanjks when on the smallest chunks
 
 
         float chunkSize = chunk.size;
         float subChunkSize = (float)chunkSize / (float)chunkSideDividingNum;
-        float chunkStartPos = chunkSize * 0.5f - subChunkSize / 2;
 
         chunk.children = new int[chunkSideDividingNum * chunkSideDividingNum * chunkSideDividingNum];
         int i = 0;
