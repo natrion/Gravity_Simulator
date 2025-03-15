@@ -33,6 +33,7 @@ struct ChunkPointData { int points[CHUNK_POINT_GROUP_SIZE]; };
 RWStructuredBuffer<SubChunkLookupTable> subChunkLookupTable;
 
 RWStructuredBuffer<ChunkPointData> ChunksGroupPointers;
+
 RWStructuredBuffer<Chunk> Chunks;
 
 RWStructuredBuffer<Particle> pointsIn;
