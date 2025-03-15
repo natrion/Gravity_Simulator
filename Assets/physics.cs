@@ -251,6 +251,9 @@ public class physics : MonoBehaviour
         chunks[chunkId] = chunk;
     }
     int[,,] subChunkLookupTable ;
+    Chunk[] chunksArray;
+    struct ChunkPointData { public int[] points; };
+    ChunkPointData[] ChunksGroupPointers;
 
     [SerializeField]private GameObject showCube;
     void prepareOtherData()
@@ -279,11 +282,13 @@ public class physics : MonoBehaviour
         makeSubChunks(0, ref chunks);
 
         //convering chunk list to chunk array
-        Chunk[] chunksArray = new Chunk[chunks.Count];
+        chunksArray = new Chunk[chunks.Count];
         for (int i = 0; i < chunksArray.Length; i++)chunksArray[i] = chunks[i];
 
-        //decleration of groups of paritivles 
-        int[,] ChunksGroupPointers = new int[Mathf.RoundToInt(chunkArea / chunkPointGroupsNum), 20];// the chunks at teh lowest level point to these groups of paritivles 
+         //decleration of groups of paritivles 
+         ChunksGroupPointers = new ChunkPointData[Mathf.RoundToInt(chunkArea / chunkPointGroupsNum)];// the chunks at teh lowest level point to these groups of paritivles 
+        for (int i = 0; i < ChunksGroupPointers.Length; i++) ChunksGroupPointers[i].points = new int[chunkPointGroupsNum];
+
 
         //making the look up table that will be used to tell in whath inedex the chuck you want to find is in 
         subChunkLookupTable = new int[chunkSideDividingNum, chunkSideDividingNum, chunkSideDividingNum];
@@ -300,35 +305,55 @@ public class physics : MonoBehaviour
             }
         }
         //soritng particle in to there respective chunks
-        /*
-        int pointId = 0;
+        int pointID = 0;
         foreach (Particle point in points)
-        {
-            int testSizeToOtherSubChunk = (chunks.Count - 1) / chunkSideDividingNum;
-            float testingChunkSize = chunkAreaCheck;
+        {          
             Vector3 position = point.position;
-            Vector3 testPos = Vector3.zero;
-            int finalId  = 0;
-            for (int i = 0; i < maxIteration; i++)
+
+            int inWhatchunk = 0;
+
+            for (int i = 0; i <= maxIteration; i++)//going repetedly to children of childer and asigning values
             {
-                Vector3 locTestpos = (position - testPos + new Vector3(testingChunkSize, testingChunkSize, testingChunkSize)/2) / (testingChunkSize / chunkSideDividingNum);// new Vector3Int[Mathf.RoundToInt() + testingChunkSize/2, Mathf.RoundToInt(position.y - testPos.y), Mathf.RoundToInt(position.z - testPos.z)
-                locTestpos = new Vector3(Mathf.Round(locTestpos.x), Mathf.Round(locTestpos.y), Mathf.Round(locTestpos.z)) * (testingChunkSize / chunkSideDividingNum);
+                inWhatchunk = findChild(0, position, chunksArray);
 
-                int subChunkId = subChunkLookupTable[(int)locTestpos.x, (int)locTestpos.y, (int)locTestpos.z];
+                if (inWhatchunk != -1)
+                {
+                    Chunk newChunk = chunks[inWhatchunk];
+                    newChunk.mass += pointMass;
+                    newChunk.numofPoints++;
+                    chunksArray[inWhatchunk] = newChunk;
 
-                finalId += subChunkId * testSizeToOtherSubChunk;
-                testPos = locTestpos;
-                testSizeToOtherSubChunk /= chunkSideDividingNum;
-                testingChunkSize /= chunkSideDividingNum;
+                    ChunkPointData newChunkPointData = ChunksGroupPointers[newChunk.pointGroupId];
+                    newChunkPointData.points[newChunk.pointGroupId] = pointID;
+                }
+                else
+                {
+                    print("point out of bounds" + position);
+                }
             }
-            chunksArray[finalId].numofPoints ++;
-            chunksArray[finalId].mass += pointMass;
-            ChunksGroupPointers[chunksArray[finalId].pointGroupId, chunksArray[finalId].numofPoints] = pointId;
-            pointId++;
-        }*/
+
+            pointID++;
+        }
+       
     }
     bool done = false;
+    int findChild(int parentId, Vector3 position, Chunk[] chunks)//function that finds the child of a parent chunk based on position
+    {
+        //calculations
+        position -= chunks[parentId].position;
+        Vector3 calPos = position / (chunks[parentId].size / (float)chunkSideDividingNum);
+        calPos += Vector3.one * (float)chunkSideDividingNum / 2f;
 
+        //out of bounce check
+        if (calPos.x < chunkSideDividingNum && calPos.y < chunkSideDividingNum && calPos.z < chunkSideDividingNum)
+        {
+            return chunks[0].children[subChunkLookupTable[Mathf.FloorToInt(calPos.x), Mathf.FloorToInt(calPos.y), Mathf.FloorToInt(calPos.z)]];//returning the child
+        }
+        else
+        {
+            return -1;//out of bounce exeption
+        }
+    }
     void Start()
     {
         if(spawnPerCube == true) SpawnPelinCube();

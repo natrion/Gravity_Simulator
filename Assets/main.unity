@@ -160,10 +160,10 @@ MonoBehaviour:
   smalestChunksSize: 5
   chunkPointGroupsNum: 1250
   chunkArea: 10
-  spawnSpehere: 0
+  spawnSpehere: 1
   spawnAmount: 200
   SpacePerAmount: 2
-  spawnPerCube: 1
+  spawnPerCube: 0
   perlinFreqency: 0.1
   perlinCubeLenghtPerPoint: 1.5
   sideNum: 50

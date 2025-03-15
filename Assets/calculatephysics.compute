@@ -6,12 +6,21 @@ struct Particle
     float3 position;
     float3 velocity;
 };
-struct Chunk {
+#define CHUNK_SIDE_DIVISION_NUMBER 2
+
+struct Chunk
+{
     float3 position;
+
     float mass;
+    int iteration;
+    int parent;
+    int children[CHUNK_SIDE_DIVISION_NUMBER * CHUNK_SIDE_DIVISION_NUMBER * CHUNK_SIDE_DIVISION_NUMBER];
+    float size;
+
+    int pointGroupId;
     int numofPoints;
 
-    int pointId;
 };
 #define CHUNK_POINT_GROUP_SIZE 20
 
@@ -21,9 +30,9 @@ struct SubChunkLookupTable
 };
 struct ChunkPointData { int points[CHUNK_POINT_GROUP_SIZE]; };
 
-RWStructuredBuffer<ChunkPointData> ChunksGroupPointers;
 RWStructuredBuffer<SubChunkLookupTable> subChunkLookupTable;
 
+RWStructuredBuffer<ChunkPointData> ChunksGroupPointers;
 RWStructuredBuffer<Chunk> Chunks;
 
 RWStructuredBuffer<Particle> pointsIn;
