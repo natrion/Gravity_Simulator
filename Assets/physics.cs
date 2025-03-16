@@ -129,6 +129,9 @@ public class physics : MonoBehaviour
             //putting data to buffers
          
             pointsInBuffer.SetData(points);
+            ChunksInBuffer.SetData(chunksArray);
+            chunkPointDataInBuffer.SetData(ChunksGroupPointers);
+
 
             //setting data for dispach
             physicsCom.SetFloat("size", pointSize);
@@ -147,9 +150,11 @@ public class physics : MonoBehaviour
             physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 128f), 1, 1);
 
             //taking data from dispach
-            points = new Particle[positionsNum];
             pointsOutBuffer.GetData(points);
             outMetrixTransformBuffer.GetData(pointsTRS);
+            ChunksOutBuffer.GetData(chunksArray);
+            chunkPointDataOutBuffer.GetData(ChunksGroupPointers);
+
             //drawing meshes
 
             if (i == frameCal-1) Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, positionsNum);
@@ -162,6 +167,9 @@ public class physics : MonoBehaviour
     ComputeBuffer outMetrixTransformBuffer;
     ComputeBuffer ChunksInBuffer;
     ComputeBuffer ChunksOutBuffer;
+    ComputeBuffer chunkPointDataInBuffer;
+    ComputeBuffer chunkPointDataOutBuffer;
+
     Matrix4x4[] pointsTRS ;
 
     int positionsNum ;
@@ -176,26 +184,47 @@ public class physics : MonoBehaviour
         mainKernel = physicsCom.FindKernel("pointCal");
         int pointStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Particle));
         int chunkStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Chunk));
-        pointsTRS = new Matrix4x4[positionsNum];
-        //declearing buffers
+        int chunkPointDataStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(ChunkPointData));
 
+        pointsTRS = new Matrix4x4[positionsNum];
+
+        //declearing buffers
         pointsInBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
         pointsOutBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
 
+        SubChunkLookupTableStructure[] lookUpTable = new SubChunkLookupTableStructure[1];
+        lookUpTable[0].data = subChunkLookupTable;
+        int lookUpTableSize = System.Runtime.InteropServices.Marshal.SizeOf(lookUpTable[0]);
+        ComputeBuffer SubChunkLookupTableBuffer = new ComputeBuffer(1, lookUpTableSize);
+        SubChunkLookupTableBuffer.SetData(lookUpTable);
+
         ChunksInBuffer = new ComputeBuffer(chunksNum, chunkStructuresize);
         ChunksInBuffer.SetData(chunksArray);
-        //ChunksOutBuffer = new ComputeBuffer(chunksNum, chunkStructuresize);
+        ChunksOutBuffer = new ComputeBuffer(chunksNum, chunkStructuresize);
+
+        chunkPointDataInBuffer = new ComputeBuffer(ChunksGroupPointers.Length, chunkPointDataStructuresize);
+        chunkPointDataInBuffer.SetData(ChunksGroupPointers);
+        chunkPointDataOutBuffer = new ComputeBuffer(ChunksGroupPointers.Length, chunkPointDataStructuresize);
 
         outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 16);
 
         //seting buffers to shader
-        physicsCom.SetBuffer(mainKernel, "Chunks", ChunksInBuffer);
+        physicsCom.SetBuffer(mainKernel, "SubChunkLookupTable", SubChunkLookupTableBuffer);
+
+        physicsCom.SetBuffer(mainKernel, "ChunksOut", ChunksOutBuffer);
+        physicsCom.SetBuffer(mainKernel, "ChunksIn", ChunksInBuffer);
+
+        physicsCom.SetBuffer(mainKernel, "ChunksGroupPointersIn", chunkPointDataInBuffer); 
+        physicsCom.SetBuffer(mainKernel, "ChunksGroupPointersOut", chunkPointDataOutBuffer);
 
         physicsCom.SetBuffer(mainKernel, "pointsIn", pointsInBuffer);
         physicsCom.SetBuffer(mainKernel, "pointsOut", pointsOutBuffer);
 
         physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
-
+        //seting data to outputput buffers 
+        pointsOutBuffer.SetData(points);
+        ChunksOutBuffer.SetData(chunksArray);
+        chunkPointDataOutBuffer.SetData(ChunksGroupPointers);
         /*
         //setting data for dispach
         physicsCom.SetFloat("size", pointSize);
@@ -205,7 +234,7 @@ public class physics : MonoBehaviour
         physicsCom.SetFloat("bounceFrictionLoss", bounceFrictionLoss);
         physicsCom.SetFloat("framecalSpeedMul", framecalSpeedMul);
         */
-       
+
     }
     int numOfSmalestChunks = 0;
     void makeSubChunks(int chunkId, ref List<Chunk> chunks )//function that makes sub chunks insade of subchanks... until it makes all chunks needed
@@ -260,9 +289,9 @@ public class physics : MonoBehaviour
         }
         chunks[chunkId] = chunk;
     }
-    struct SubChunkLookupTable
+    struct SubChunkLookupTableStructure
     {
-        int[,,] data;
+        public int[,,] data;
     };
     int[,,] subChunkLookupTable ;
     Chunk[] chunksArray;
@@ -376,13 +405,14 @@ public class physics : MonoBehaviour
 
         if(Spawn2Points == true) spawnTwoPoints();
 
-        generateBufferes();
         prepareOtherData();
+
+        generateBufferes();
 
         done = true;
     }
     void Update()
     {
-       // if(done == true)visualizatePositions();
+        if(done == true)visualizatePositions();
     }
 }
