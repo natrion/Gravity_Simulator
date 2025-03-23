@@ -2,16 +2,16 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class physics : MonoBehaviour
+public unsafe class physics : MonoBehaviour
 {
     [Header("Basic Setup")]
+    const int chunkPointGroupsNum = 200;
+    const int chunkSideDividingNum = 2;
     [SerializeField] private ComputeShader physicsCom;
     [SerializeField] private Mesh pointMesh;
     [SerializeField] private Material pointMaterial;
-    [SerializeField] private int NUM_OF_THREADS = 256;
-    [SerializeField] private int chunkSideDividingNum = 2;
-    [SerializeField] private float smalestChunksSize = 5;
-    [SerializeField] private int chunkPointGroupsNum = 1250;
+    [SerializeField] private  int NUM_OF_THREADS = 256;
+    [SerializeField]  private float smalestChunksSize = 5;
     [SerializeField] private float chunkArea = 1000;
     [Header("Spawning Points Sphere")]
     [SerializeField] private bool spawnSpehere;
@@ -40,6 +40,7 @@ public class physics : MonoBehaviour
         public Vector3 position;
         public Vector3 velocity;
     };
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     struct Chunk
     {
         public Vector3 position;
@@ -47,7 +48,7 @@ public class physics : MonoBehaviour
         public float mass;
         public int iteration;
         public int parent;
-        public int[] children;
+        public fixed int children[chunkSideDividingNum * chunkSideDividingNum * chunkSideDividingNum];
         public float size;
 
         public int pointGroupId;
@@ -60,7 +61,7 @@ public class physics : MonoBehaviour
     Vector3 EulerToNormal(Vector3 eulerAngles)
     {
         Quaternion rotation = Quaternion.Euler(eulerAngles); // Euler na Quaternion
-        return rotation * Vector3.forward; // Aplikujeme rotáciu na vektor (0,0,1)
+        return rotation * Vector3.forward; // Aplikujeme rotï¿½ciu na vektor (0,0,1)
     }
     
     void spawnPointsSpere()
@@ -192,12 +193,6 @@ public class physics : MonoBehaviour
         pointsInBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
         pointsOutBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
 
-        SubChunkLookupTableStructure[] lookUpTable = new SubChunkLookupTableStructure[1];
-        lookUpTable[0].data = subChunkLookupTable;
-        int lookUpTableSize = System.Runtime.InteropServices.Marshal.SizeOf(lookUpTable[0]);
-        ComputeBuffer SubChunkLookupTableBuffer = new ComputeBuffer(1, lookUpTableSize);
-        SubChunkLookupTableBuffer.SetData(lookUpTable);
-
         ChunksInBuffer = new ComputeBuffer(chunksNum, chunkStructuresize);
         ChunksInBuffer.SetData(chunksArray);
         ChunksOutBuffer = new ComputeBuffer(chunksNum, chunkStructuresize);
@@ -209,8 +204,7 @@ public class physics : MonoBehaviour
         outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 16);
 
         //seting buffers to shader
-        physicsCom.SetBuffer(mainKernel, "SubChunkLookupTable", SubChunkLookupTableBuffer);
-
+        
         physicsCom.SetBuffer(mainKernel, "ChunksOut", ChunksOutBuffer);
         physicsCom.SetBuffer(mainKernel, "ChunksIn", ChunksInBuffer);
 
@@ -235,6 +229,31 @@ public class physics : MonoBehaviour
         physicsCom.SetFloat("framecalSpeedMul", framecalSpeedMul);
         */
 
+        //puting subchunk lookup table to shader
+       
+        int flatSize = chunkSideDividingNum * chunkSideDividingNum * chunkSideDividingNum;
+        SubChunkLookupTableStructure lookupTable = new SubChunkLookupTableStructure();
+
+        // Flatten the multidimensional array into a one-dimensional array
+        int index = 0;
+        for (int x = 0; x <chunkSideDividingNum; x++)
+        {
+            for (int y = 0; y < chunkSideDividingNum; y++)
+            {
+                for (int z = 0; z <chunkSideDividingNum; z++)
+                {
+                    lookupTable.data[index++] = subChunkLookupTable[x, y, z];
+                }
+            }
+        }
+        // Create a ComputeBuffer for the struct
+        ComputeBuffer SubChunkLookupTableBuffer = new ComputeBuffer(1, flatSize * sizeof(int));
+        SubChunkLookupTableBuffer.SetData(new SubChunkLookupTableStructure[] { lookupTable });
+
+        // Set the buffer to the compute shader
+        physicsCom.SetBuffer(mainKernel, "subChunkLookupTable", SubChunkLookupTableBuffer);
+
+
     }
     int numOfSmalestChunks = 0;
     void makeSubChunks(int chunkId, ref List<Chunk> chunks )//function that makes sub chunks insade of subchanks... until it makes all chunks needed
@@ -249,13 +268,12 @@ public class physics : MonoBehaviour
         showCubeInstance.SetActive(false);
         */
 
-        if (chunk.iteration < 0) return;//not making sub chanjks when on the smallest chunks
+        if (chunk.iteration-1 < 0) return;//not making sub chanjks when on the smallest chunks
 
 
         float chunkSize = chunk.size;
         float subChunkSize = (float)chunkSize / (float)chunkSideDividingNum;
 
-        chunk.children = new int[chunkSideDividingNum * chunkSideDividingNum * chunkSideDividingNum];
         int i = 0;
         //making all subchanks
         for (float x = 0; x < chunkSideDividingNum; x++)
@@ -280,7 +298,6 @@ public class physics : MonoBehaviour
                     if (subChunk.iteration == 0) {
                         subChunk.pointGroupId = numOfSmalestChunks;
                         numOfSmalestChunks++;
-                        subChunk.children = new int[4];
                     }
                     makeSubChunks(subChunkId, ref chunks);
                     i++;
@@ -291,11 +308,11 @@ public class physics : MonoBehaviour
     }
     struct SubChunkLookupTableStructure
     {
-        public int[,,] data;
+        public fixed int data[chunkSideDividingNum*chunkSideDividingNum*chunkSideDividingNum];
     };
-    int[,,] subChunkLookupTable ;
+    private int[,,] subChunkLookupTable ;
     Chunk[] chunksArray;
-    struct ChunkPointData { public int[] points; };
+    struct ChunkPointData { public fixed int points[chunkPointGroupsNum]; };
     ChunkPointData[] ChunksGroupPointers;
 
     [SerializeField]private GameObject showCube;
@@ -329,9 +346,7 @@ public class physics : MonoBehaviour
         for (int i = 0; i < chunksArray.Length; i++)chunksArray[i] = chunks[i];
 
          //decleration of groups of paritivles 
-         ChunksGroupPointers = new ChunkPointData[Mathf.RoundToInt(chunkArea / chunkPointGroupsNum)];// the chunks at teh lowest level point to these groups of paritivles 
-        for (int i = 0; i < ChunksGroupPointers.Length; i++) ChunksGroupPointers[i].points = new int[chunkPointGroupsNum];
-
+        ChunksGroupPointers = new ChunkPointData[numOfSmalestChunks];// the chunks at teh lowest level point to these groups of paritivles 
 
         //making the look up table that will be used to tell in whath inedex the chuck you want to find is in 
         subChunkLookupTable = new int[chunkSideDividingNum, chunkSideDividingNum, chunkSideDividingNum];

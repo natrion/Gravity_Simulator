@@ -22,13 +22,14 @@ struct Chunk
     int numofPoints;
 
 };
+
 #define CHUNK_POINT_GROUP_SIZE 20
 
 struct SubChunkLookupTable
 {
-    int data[CHUNK_POINT_GROUP_SIZE][CHUNK_POINT_GROUP_SIZE][CHUNK_POINT_GROUP_SIZE];
+    int data[CHUNK_SIDE_DIVISION_NUMBER][CHUNK_SIDE_DIVISION_NUMBER][CHUNK_SIDE_DIVISION_NUMBER];
 };
-struct ChunkPointData { int points[CHUNK_POINT_GROUP_SIZE]; };
+struct ChunkPointData { int points[CHUNK_POINT_GROUP_SIZE];, int freeSlots[CHUNK_POINT_GROUP_SIZE]; };
 
 RWStructuredBuffer<SubChunkLookupTable> subChunkLookupTable;
 
@@ -156,6 +157,60 @@ float3 clampToHightFloat3(float3 input) {
     return clamp(input, float3(-100, -100, -100), float3(100, 100, 100));
 }
 
+void CalculatePhysicsTwoPoints(float3 testPos,float3 testVel,float testMass , int testNum,int mainParticleId, inout Particle changedPoint)
+{
+    float3 mainPos = changedPoint.position;
+    //geting values for calculating 
+    float disTestPos = distance(mainPos, testPos);
+    
+    
+    if (disTestPos > 0.00001)
+    {
+
+        //geting values for calculating 
+        float3 dirTestPos = normalize(testPos - mainPos) ;
+
+        float3 velDif =  pointsIn[mainParticleId].velocity - testVel ;
+        float velDifScale = length(velDif);
+        //calculating frictionForce
+        float frictionForce = (velDifScale / pow(disTestPos,1)) * frictionStrenght *(float)testNum;
+        changedPoint.velocity -= clampToHightFloat3(velDif * min(1, frictionForce));
+
+        //calculating gravity
+        if (disTestPos > size)
+        {
+            float gravityForce = (testMass / (disTestPos * disTestPos)) * GStrenght;
+            changedPoint.velocity += clampToHightFloat3(gravityForce * dirTestPos);
+        }
+
+        velDif = testVel  - changedPoint.velocity;
+        velDifScale = length(velDif);
+        //calculating pushforce
+        float pushForce = (1 / max(pow(max(disTestPos,size), 3),0.0001))* pushStrenght ;
+        changedPoint.velocity += clampToHightFloat3(pushForce * - dirTestPos );
+        
+    }
+    
+    
+
+}
+int findChild(int parentId, float3 position)//function that finds the child of a parent chunk based on position
+{
+    //calculations
+    position -= ChunksIn[parentId].position;// make calculations based on the parent position
+    float3 calPos = position / (ChunksIn[parentId].size / (float)CHUNK_SIDE_DIVISION_NUMBER);//divide the position to get position in CHUNK_SIDE_DIVISION_NUMBER scale
+    calPos += float3(1,1,1)* (float)CHUNK_SIDE_DIVISION_NUMBER / 2; // add half of the CHUNK_SIDE_DIVISION_NUMBER to get the position thats in positive coordinates
+    calPos = floor(calPos);
+    //out of bounce check
+    if (calPos.x < CHUNK_SIDE_DIVISION_NUMBER && calPos.y < CHUNK_SIDE_DIVISION_NUMBER && calPos.z < CHUNK_SIDE_DIVISION_NUMBER)
+    {
+        return ChunksIn[0].children[subChunkLookupTable[0].data[calPos.x][calPos.y][calPos.z]];//returning the child
+    }
+    else
+    {
+        return -1;//out of bounce exeption
+    }
+}
 #define NUM_OF_THREADS 128
 [numthreads(NUM_OF_THREADS,1,1)]
 void pointCal (uint3 id : SV_DispatchThreadID)
@@ -172,41 +227,7 @@ void pointCal (uint3 id : SV_DispatchThreadID)
         {
             if (i != id.x)//only doing caculations on diferent points
             {               
-                Particle testParticle = pointsIn[i];
-                float3 testPos = testParticle.position;//inicializatinf test pos
-                //geting values for calculating 
-                float disTestPos = distance(mainPos, testPos);
-             
-               
-                if (disTestPos > 0.00001)
-                {
-
-                    //geting values for calculating 
-                    float3 dirTestPos = normalize(testPos - mainPos) ;
-
-                    float3 velDif =  pointsIn[id.x].velocity -  testParticle.velocity ;
-                    float velDifScale = length(velDif);
-                    //calculating frictionForce
-                    float frictionForce = (velDifScale / pow(disTestPos,1)) * frictionStrenght;
-                    changedPoint.velocity -= clampToHightFloat3(velDif * min(1, frictionForce));
-
-                    //calculating gravity
-                    if (disTestPos > size)
-                    {
-                        float gravityForce = (pointMass / (disTestPos * disTestPos)) * GStrenght;
-                        changedPoint.velocity += clampToHightFloat3(gravityForce * dirTestPos);
-                    }
-
-                    velDif = testParticle.velocity  - changedPoint.velocity;
-                    velDifScale = length(velDif);
-                    //calculating pushforce
-                    float pushForce = (1 / max(pow(max(disTestPos,size), 3),0.0001))* pushStrenght ;
-                    changedPoint.velocity += clampToHightFloat3(pushForce * - dirTestPos );
-                    
-                }
-                
-                
- 
+                CalculatePhysicsTwoPoints(pointsIn[i].position,pointsIn[i].velocity,pointMass , 1,id.x ,changedPoint);
             }
         }
 
