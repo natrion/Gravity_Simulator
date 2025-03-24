@@ -11,15 +11,17 @@ struct Particle
 struct Chunk
 {
     float3 position;
-
+    float3 AvrVelocity;
     float mass;
+    int numofPoints;
+
     int iteration;
     int parent;
     int children[CHUNK_SIDE_DIVISION_NUMBER * CHUNK_SIDE_DIVISION_NUMBER * CHUNK_SIDE_DIVISION_NUMBER];
     float size;
 
-    int pointGroupId;
-    int numofPoints;
+    int startPointId;
+    int endGroupId;
 
 };
 
@@ -29,12 +31,19 @@ struct SubChunkLookupTable
 {
     int data[CHUNK_SIDE_DIVISION_NUMBER][CHUNK_SIDE_DIVISION_NUMBER][CHUNK_SIDE_DIVISION_NUMBER];
 };
-struct ChunkPointData { int points[CHUNK_POINT_GROUP_SIZE];, int freeSlots[CHUNK_POINT_GROUP_SIZE]; };
+
+struct pointChunkListElement { 
+    int lastElement; 
+    int data ;
+    int parentChunkId; 
+    int nextElement; 
+};
 
 RWStructuredBuffer<SubChunkLookupTable> subChunkLookupTable;
 
-RWStructuredBuffer<ChunkPointData> ChunksGroupPointersIn;
-RWStructuredBuffer<ChunkPointData> ChunksGroupPointersOut;
+RWStructuredBuffer<pointChunkListElement> pointChunkList;
+RWStructuredBuffer<int> freePointChunkSlots;
+int freePointChunkSlotsLastElement;
 
 RWStructuredBuffer<Chunk> ChunksIn;
 RWStructuredBuffer<Chunk> ChunksOut;
@@ -150,6 +159,7 @@ float pushStrenght;
 float size;
 float pointMass;
 float framecalSpeedMul = 1;
+int chunkArea;
 
 
 
@@ -157,7 +167,7 @@ float3 clampToHightFloat3(float3 input) {
     return clamp(input, float3(-100, -100, -100), float3(100, 100, 100));
 }
 
-void CalculatePhysicsTwoPoints(float3 testPos,float3 testVel,float testMass , int testNum,int mainParticleId, inout Particle changedPoint)
+void CalculatePhysicsTwoPoints(float3 testPos,float3 testVel,float testMass , int testNumOfParticles,int mainParticleId, inout Particle changedPoint)
 {
     float3 mainPos = changedPoint.position;
     //geting values for calculating 
@@ -173,7 +183,7 @@ void CalculatePhysicsTwoPoints(float3 testPos,float3 testVel,float testMass , in
         float3 velDif =  pointsIn[mainParticleId].velocity - testVel ;
         float velDifScale = length(velDif);
         //calculating frictionForce
-        float frictionForce = (velDifScale / pow(disTestPos,1)) * frictionStrenght *(float)testNum;
+        float frictionForce = (velDifScale / pow(disTestPos,1)) * frictionStrenght *(float)testNumOfParticles;
         changedPoint.velocity -= clampToHightFloat3(velDif * min(1, frictionForce));
 
         //calculating gravity
@@ -211,6 +221,38 @@ int findChild(int parentId, float3 position)//function that finds the child of a
         return -1;//out of bounce exeption
     }
 }
+void calculatePhysicsFromChunk(int chunkId ,int mainParticleId, inout Particle changedPoint)//function that calculates physics on a chunk
+{
+    Chunk Chunk = ChunksIn[chunkId];//defining the chunk
+    float sizeTreshHold =  (Chunk.size/CHUNK_SIDE_DIVISION_NUMBER)*0.8;//finding the size treshhold
+
+    if(Chunk.iteration == 0)//if the last chunk is reached then calculate physics on all points in the chunk
+    {
+        int curentPointId = Chunk.startPointId; 
+        do {//going thrue all points in the chunk
+            Particle testPoint = pointsIn[pointChunkList[curentPointId]];
+            CalculatePhysicsTwoPoints(testPoint.position, testPoint.velocity, pointMass, 1, mainParticleId, changedPoint);//calculatng physics on the point
+
+            curentPointId = pointChunkList[curentPointId].nextElement;
+
+        } while (pointChunkList[curentPointId].nextElement != -1);
+        
+    }else//if the last chunk is not reached then calculate physics on all subchunks
+    {
+        for (int i = 0; i < Chunk.children.length; i++)//going thrue all subchunks
+        {
+            Chunk subChunk = Chunk.children[i];
+            if ( abs(subChunk.position.x - changedPoint.position.x) <sizeTreshHold && abs(subChunk.position.y - changedPoint.position.y) <sizeTreshHold && abs(subChunk.position.z - changedPoint.position.z) < sizeTreshHold)//finding out if point is near the subchunk
+            {
+                calculatePhysicsFromChunk(subChunk.children[0], mainParticleId, changedPoint);//recursivly calling the function on close chunks for more accurate physics in close range 
+            }else // calculating physics on far chunks
+            {
+                CalculatePhysicsTwoPoints(subChunk.position, subChunk.AvrVelocity, subChunk.mass, testNumOfParticles, mainParticleId, changedPoint);
+            }
+        }
+    }
+    
+}
 #define NUM_OF_THREADS 128
 [numthreads(NUM_OF_THREADS,1,1)]
 void pointCal (uint3 id : SV_DispatchThreadID)
@@ -218,10 +260,16 @@ void pointCal (uint3 id : SV_DispatchThreadID)
     float collisionDis = 0.1;
     if (id.x < pointsIn.Length)//checks if this is still part od the distances
     {
-        float3 mainPos = pointsIn[id.x].position;//gets the position that the thred is checking
-
-        Particle changedPoint = pointsIn[id.x];
+        Particle changedPoint = pointsIn[id.x];//crete a new point to change during this function 
         
+        //out of bounce check
+        if (findChild(0 , pointsIn[id.x].position) == -1)
+        {
+            changedPoint.velocity = pointsIn[id.x].velocity*-1;
+            changedPoint.position = clamp(pointsIn[id.x].position,-chunkArea,chunkArea ); 
+        }     
+
+        /*
         //going thrue all points to calculate forces
         for (int i = 0; i < pointsIn.Length; i++)
         {
@@ -229,13 +277,19 @@ void pointCal (uint3 id : SV_DispatchThreadID)
             {               
                 CalculatePhysicsTwoPoints(pointsIn[i].position,pointsIn[i].velocity,pointMass , 1,id.x ,changedPoint);
             }
-        }
-
+        }*/
+        //calling the function that calculates physics
+        calculatePhysicsFromChunk(0, id.x, changedPoint);
        
         //caculating velociti for points that are not close together
         float3 disTochange = min(5,frameLenght) * changedPoint.velocity * framecalSpeedMul;
         changedPoint.position += clampToHightFloat3(disTochange);
+        //writing chunk and point-list data
+        int iteration = ChunksIn[0].iteration;
+        while(iteration>-1)
+        {
 
+        }
         //apling buffers
         MetrixTransforms[id.x] = CreateTRSMatrix(changedPoint.position, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
         pointsOut[id.x] = changedPoint;
