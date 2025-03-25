@@ -5,6 +5,10 @@ struct Particle
 {
     float3 position;
     float3 velocity;
+
+    int nextElement;
+    int prevElement;
+    int chunkId;
 };
 #define CHUNK_SIDE_DIVISION_NUMBER 2
 
@@ -32,18 +36,8 @@ struct SubChunkLookupTable
     int data[CHUNK_SIDE_DIVISION_NUMBER][CHUNK_SIDE_DIVISION_NUMBER][CHUNK_SIDE_DIVISION_NUMBER];
 };
 
-struct pointChunkListElement { 
-    int lastElement; 
-    int data ;
-    int parentChunkId; 
-    int nextElement; 
-};
 
 RWStructuredBuffer<SubChunkLookupTable> subChunkLookupTable;
-
-RWStructuredBuffer<pointChunkListElement> pointChunkList;
-RWStructuredBuffer<int> freePointChunkSlots;
-int freePointChunkSlotsLastElement;
 
 RWStructuredBuffer<Chunk> ChunksIn;
 RWStructuredBuffer<Chunk> ChunksOut;
@@ -211,15 +205,9 @@ int findChild(int parentId, float3 position)//function that finds the child of a
     float3 calPos = position / (ChunksIn[parentId].size / (float)CHUNK_SIDE_DIVISION_NUMBER);//divide the position to get position in CHUNK_SIDE_DIVISION_NUMBER scale
     calPos += float3(1,1,1)* (float)CHUNK_SIDE_DIVISION_NUMBER / 2; // add half of the CHUNK_SIDE_DIVISION_NUMBER to get the position thats in positive coordinates
     calPos = floor(calPos);
-    //out of bounce check
-    if (calPos.x < CHUNK_SIDE_DIVISION_NUMBER && calPos.y < CHUNK_SIDE_DIVISION_NUMBER && calPos.z < CHUNK_SIDE_DIVISION_NUMBER)
-    {
-        return ChunksIn[0].children[subChunkLookupTable[0].data[calPos.x][calPos.y][calPos.z]];//returning the child
-    }
-    else
-    {
-        return -1;//out of bounce exeption
-    }
+    //out of bounce check   
+    return ChunksIn[parentId].children[subChunkLookupTable[0].data[calPos.x][calPos.y][calPos.z]];//returning the child
+   
 }
 void calculatePhysicsFromChunk(int chunkId ,int mainParticleId, inout Particle changedPoint)//function that calculates physics on a chunk
 {
@@ -230,10 +218,10 @@ void calculatePhysicsFromChunk(int chunkId ,int mainParticleId, inout Particle c
     {
         int curentPointId = Chunk.startPointId; 
         do {//going thrue all points in the chunk
-            Particle testPoint = pointsIn[pointChunkList[curentPointId]];
+            Particle testPoint = pointsIn[curentPointId];
             CalculatePhysicsTwoPoints(testPoint.position, testPoint.velocity, pointMass, 1, mainParticleId, changedPoint);//calculatng physics on the point
 
-            curentPointId = pointChunkList[curentPointId].nextElement;
+            curentPointId = pointsIn[curentPointId].nextElement;
 
         } while (pointChunkList[curentPointId].nextElement != -1);
         
@@ -284,15 +272,64 @@ void pointCal (uint3 id : SV_DispatchThreadID)
         //caculating velociti for points that are not close together
         float3 disTochange = min(5,frameLenght) * changedPoint.velocity * framecalSpeedMul;
         changedPoint.position += clampToHightFloat3(disTochange);
-        //writing chunk and point-list data
-        int iteration = ChunksIn[0].iteration;
-        while(iteration>-1)
+        //out of bounce check for the new position
+        if (findChild(0 , changedPoint.position) == -1)
         {
-
+            changedPoint.velocity = pointsIn[id.x].velocity*-1;
+            changedPoint.position = clamp(pointsIn[id.x].position,-chunkArea,chunkArea ); 
         }
         //apling buffers
         MetrixTransforms[id.x] = CreateTRSMatrix(changedPoint.position, float4(0, 0, 0, 1), float3(1, 1, 1) * size);
         pointsOut[id.x] = changedPoint;
+
+        //writing chunk and point-list data
+        int newPointChunkIterationId =0;
+        int OldPointChunkIterationId = 0;
+
+        Particle oldPoint = pointsIn[id.x];
+        while(iteration>-1)//iterating down the chunks hierarchy to update all chunks that dont mach the new position
+        {
+            if (newPointChunkIterationId != OldPointChunkIterationId)
+            {
+                //upadatong new chunks
+                InterlockedAdd(ChunksOut[newPointChunkIterationId].numofPoints, 1);
+                InterlockedAdd(ChunksOut[newPointChunkIterationId].mass, pointMass);
+                //upadatong old chunks
+                InterlockedAdd(ChunksOut[OldPointChunkIterationId].numofPoints, -1);
+                InterlockedAdd(ChunksOut[OldPointChunkIterationId].mass, -pointMass);
+                
+            }
+            newPointChunkIterationId = findchild(newPointChunkIterationId, changedPoint.position);
+            OldPointChunkIterationId = findchild(OldPointChunkIterationId, oldPoint.position);
+            iteration--;
+        }
+        //changing the point list
+        if (newPointChunkIterationId != OldPointChunkIterationId)
+        {
+            //changing the olds points chucks - point list
+            if(changedPoint.prevElement!=-1) InterlockedExchange(pointsOut[changedPoint.prevElement].nextElement, changedPoint.nextElement );
+            if(changedPoint.nextElement!=-1) InterlockedExchange(pointsOut[changedPoint.nextElement].prevElement, changedPoint.prevElement);
+            //changing the news points chucks - point list
+            
+            if(ChunksOut[newPointChunkIterationId].numofPoints == 0)
+            {
+                InterlockedExchange(ChunksOut[newPointChunkIterationId].startPointId, id.x);
+                InterlockedExchange(ChunksOut[newPointChunkIterationId].endGroupId, id.x);
+                InterlockedExchange(pointsOut[id.x].nextElement, -1);
+                InterlockedExchange(pointsOut[id.x].prevElement, -1);
+            }else    
+            {
+                InterlockedExchange(ChunksOut[newPointChunkIterationId].endGroupId, id.x);
+                interLockedExchange(pointsOut[ChunksOut[newPointChunkIterationId].endGroupId].nextElement, id.x);
+                InterlockedExchange(pointsOut[id.x].prevElement, ChunksOut[newPointChunkIterationId].endGroupId);
+                InterlockedExchange(pointsOut[id.x].nextElement, -1);
+            }
+            InterlockedExchange(pointsOut[changedPoint.prevElement].nextElement, changedPoint.nextElement );
+            InterlockedExchange(pointsOut[changedPoint.nextElement].prevElement, changedPoint.prevElement);
+            
+        }
+        
+            
 
     }
     
