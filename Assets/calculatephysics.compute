@@ -26,7 +26,7 @@ struct Chunk
 
     int startPointId;
     int endGroupId;
-
+    bool curentlyInUse;
 };
 
 #define CHUNK_POINT_GROUP_SIZE 20
@@ -241,6 +241,63 @@ void calculatePhysicsFromChunk(int chunkId ,int mainParticleId, inout Particle c
     }
     
 }
+void setPointGroups(int lastChunkId, int nextChunkId , int pointid)
+{
+    Particle notChangedPoint = pointsOut[pointid];
+    bool lastChunksGroupConfigured = false;
+    bool nextChunksGroupConfigured = false;
+    while (nextChunksGroupConfigured == false || lastChunksGroupConfigured == false) // Keep looping until this thread successfully changes the value
+    {
+        //checking if the last chunk is curently in use if not then change the chunk group points
+        if (ChunksOut[lastChunkId].curentlyInUse == false)
+        {
+            bool originalValue;      
+            // Atomically attempt to set curentlyInUse to true
+            InterlockedExchange(ChunksOut[lastChunkId].curentlyInUse, true, originalValue);        // Atomically attempt to set curentlyInUse to true
+
+            // Check if this thread successfully changed the value
+            if (originalValue == false) 
+            {
+                 //changing the olds points chucks - point list
+                if(notChangedPoint.prevElement!=-1) pointsOut[changedPoint.prevElement].nextElement = changedPoint.nextElement ;
+                if(notChangedPoint.nextElement!=-1) pointsOut[changedPoint.nextElement].prevElement=changedPoint.prevElement;
+
+                lastChunksGroupConfigured = true;//last chunk is configured
+                ChunksOut[lastChunkId].curentlyInUse = false;//leting other threads change the chunk
+            }
+        }
+        //checking if the next chunk is curently in use if not then change the chunk group points
+        if (ChunksOut[nextChunkId].curentlyInUse == false)
+        {
+            bool originalValue;      
+            // Atomically attempt to set curentlyInUse to true
+            InterlockedExchange(ChunksOut[nextChunkId].curentlyInUse, true, originalValue);        // Atomically attempt to set curentlyInUse to true
+
+            // Check if this thread successfully changed the value
+            if (originalValue == false) 
+            {
+                //changing the news points chucks - point list
+                if(ChunksOut[nextChunkId].numofPoints == 0)// if the chunk is empty
+                {
+                    ChunksOut[nextChunkId].startPointId = pointid;
+                    ChunksOut[nextChunkId].endGroupId =pointid;
+                    pointsOut[pointid].nextElement= -1;
+                    pointsOut[pointid].prevElement, -1;
+                }else//if the cunk is not empty
+                {
+                    ChunksOut[nextChunkId].endGroupId = pointid;
+                    pointsOut[ChunksOut[nextChunkId].endGroupId].nextElement= pointid;
+                    pointsOut[pointid].prevElement= ChunksOut[newPointChunkIterationId].endGroupId;
+                    pointsOut[pointid].nextElement= -1;
+                    ChunksOut[newPointChunkIterationId].endGroupId = pointid;
+                }
+                nextChunksGroupConfigured = true;//last chunk is configured
+                ChunksOut[nextChunkId].curentlyInUse = false;//leting other threads change the chunk
+            }
+        }
+    }
+}
+
 #define NUM_OF_THREADS 128
 [numthreads(NUM_OF_THREADS,1,1)]
 void pointCal (uint3 id : SV_DispatchThreadID)
@@ -306,26 +363,11 @@ void pointCal (uint3 id : SV_DispatchThreadID)
         //changing the point list
         if (newPointChunkIterationId != OldPointChunkIterationId)
         {
-            //changing the olds points chucks - point list
-            if(changedPoint.prevElement!=-1) InterlockedExchange(pointsOut[changedPoint.prevElement].nextElement, changedPoint.nextElement );
-            if(changedPoint.nextElement!=-1) InterlockedExchange(pointsOut[changedPoint.nextElement].prevElement, changedPoint.prevElement);
-            //changing the news points chucks - point list
+           
             
-            if(ChunksOut[newPointChunkIterationId].numofPoints == 0)
-            {
-                InterlockedExchange(ChunksOut[newPointChunkIterationId].startPointId, id.x);
-                InterlockedExchange(ChunksOut[newPointChunkIterationId].endGroupId, id.x);
-                InterlockedExchange(pointsOut[id.x].nextElement, -1);
-                InterlockedExchange(pointsOut[id.x].prevElement, -1);
-            }else    
-            {
-                InterlockedExchange(ChunksOut[newPointChunkIterationId].endGroupId, id.x);
-                interLockedExchange(pointsOut[ChunksOut[newPointChunkIterationId].endGroupId].nextElement, id.x);
-                InterlockedExchange(pointsOut[id.x].prevElement, ChunksOut[newPointChunkIterationId].endGroupId);
-                InterlockedExchange(pointsOut[id.x].nextElement, -1);
-            }
-            InterlockedExchange(pointsOut[changedPoint.prevElement].nextElement, changedPoint.nextElement );
-            InterlockedExchange(pointsOut[changedPoint.nextElement].prevElement, changedPoint.prevElement);
+            
+            
+
             
         }
         
