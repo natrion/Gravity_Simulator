@@ -13,6 +13,7 @@ public unsafe class physics : MonoBehaviour
     [SerializeField] private  int NUM_OF_THREADS = 256;
     [SerializeField]  private float smalestChunksSize = 5;
     [SerializeField] private float chunkArea = 1000;
+    [SerializeField] private float chunkCalSize = 20;
     [Header("Spawning Points Sphere")]
     [SerializeField] private bool spawnSpehere;
     [SerializeField] private int spawnAmount = 20;
@@ -31,6 +32,7 @@ public unsafe class physics : MonoBehaviour
     [SerializeField] private float frictionStrenght = 1;
     [SerializeField] private float GStrenght = 1;
     [Header("simulation")]
+
     [SerializeField] private int frameCal = 1;
     [Range(0f, 5f)]
     [SerializeField] private float framecalSpeedMul = 1;
@@ -39,21 +41,27 @@ public unsafe class physics : MonoBehaviour
     {
         public Vector3 position;
         public Vector3 velocity;
+
+        public int nextElement;
+        public int prevElement;
+        public int chunkId;
     };
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     struct Chunk
     {
         public Vector3 position;
-
+        public Vector3 totalVelocity;
         public float mass;
-        public int iteration;
-        public int parent;
-        public fixed int children[chunkSideDividingNum * chunkSideDividingNum * chunkSideDividingNum];
-        public float size;
-
-        public int pointGroupId;
         public int numofPoints;
 
+        public int iteration;
+        public int parent;
+        public int children[CHUNK_SIDE_DIVISION_NUMBER * CHUNK_SIDE_DIVISION_NUMBER * CHUNK_SIDE_DIVISION_NUMBER];
+        public float size;
+
+        public int startPointId;
+        public int endGroupId;
+        public bool curentlyInUse;
     };
     //[SerializeField]
     private Particle[] points;
@@ -122,18 +130,10 @@ public unsafe class physics : MonoBehaviour
         points[1].velocity = Vector3.left * -0.1f;
     }
 
-
     void visualizatePositions()
     {
         for (int i = 0; i < frameCal; i++)//repeating calculatin forfaster simulation
         {
-            //putting data to buffers
-         
-            pointsInBuffer.SetData(points);
-            ChunksInBuffer.SetData(chunksArray);
-            chunkPointDataInBuffer.SetData(ChunksGroupPointers);
-
-
             //setting data for dispach
             physicsCom.SetFloat("size", pointSize);
             physicsCom.SetFloat("pointMass", pointMass);
@@ -147,17 +147,14 @@ public unsafe class physics : MonoBehaviour
             physicsCom.SetFloat("NUM_OF_THREADS", NUM_OF_THREADS);
             physicsCom.SetFloat("frameLenght", Time.deltaTime);
 
-            //dispatch
+            physicsCom.SetInt("chunkCalSize", chunkCalSize);
+            //dispatching compute kernel
+            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 128f), 1, 1);
             physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 128f), 1, 1);
 
             //taking data from dispach
-            pointsOutBuffer.GetData(points);
             outMetrixTransformBuffer.GetData(pointsTRS);
-            ChunksOutBuffer.GetData(chunksArray);
-            chunkPointDataOutBuffer.GetData(ChunksGroupPointers);
-
             //drawing meshes
-
             if (i == frameCal-1) Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, positionsNum);
         }
 
@@ -176,16 +173,109 @@ public unsafe class physics : MonoBehaviour
     int positionsNum ;
     int chunksNum;
     int mainKernel;
+    int preparationKernel;
 
 
     void generateBufferes()
     {
+        ////////////////////////////////////////////////////////////////////////////////////////oher data setup
+        
+        //calculating the actual chunk area becose it needs to be a some number of powesr of smallestChunkSize powerd by chunkSideDividingNum 
+        float chunkAreaCheck = smalestChunksSize;
+        int maxIteration = 0;
+        while (chunkAreaCheck < chunkArea)
+        {
+            chunkAreaCheck *= chunkSideDividingNum;
+            maxIteration++;
+        }
+        chunkArea = chunkAreaCheck;
+        //making the bigest parent chunk 
+        List<Chunk> chunks = new List<Chunk>();
+
+        Chunk chunk = new Chunk();
+        chunk.iteration = maxIteration;
+        chunk.position = Vector3.zero;
+        chunk.mass = 0;
+        chunk.numofPoints = 0;
+        chunk.size = chunkArea;
+        numOfSmalestChunks = 0;
+        chunks.Add(chunk);
+        //making all chunks insade that chunk
+        makeSubChunks(0, ref chunks);
+
+        //convering chunk list to chunk array
+        chunksArray = new Chunk[chunks.Count];
+        for (int i = 0; i < chunksArray.Length; i++)chunksArray[i] = chunks[i];
+
+        //making the look up table that will be used to tell in whath inedex the chuck you want to find is in 
+        subChunkLookupTable = new int[chunkSideDividingNum, chunkSideDividingNum, chunkSideDividingNum];
+        int lookUpSetupI = 0;
+        for (int x = 0; x < chunkSideDividingNum ; x++)
+        {
+            for (int y = 0; y < chunkSideDividingNum ; y++)
+            {
+                for (int z = 0; z < chunkSideDividingNum; z ++)
+                {
+                    subChunkLookupTable[x, y, z] = lookUpSetupI;
+                    lookUpSetupI++;
+                }
+            }
+        }
+        //soritng particle in to there respective chunks
+        int pointID = 0;
+        foreach (Particle point in points)
+        {          
+            Vector3 position = point.position;
+            
+            int inWhatchunk = 0;
+
+            for (int i = 0; i <= maxIteration; i--)//going repetedly to children of childer and asigning values
+            {
+                inWhatchunk = findChild(0, position, chunksArray);
+
+                if (inWhatchunk != -1)
+                {
+                    Chunk newChunk = chunks[inWhatchunk];
+                    newChunk.mass += pointMass;
+                    newChunk.numofPoints++;
+                    newChunk.totalVelocity += point.velocity;
+
+                    if (newChunk.iteration == 0)// calculationg data for points in smallest chunks
+                    {
+                        point.chunkId = inWhatchunk;
+                        point.nextElement = -1;
+                        if (newChunk.numofPoints > 1)//calculations on not emty chunks
+                        {
+                           point.prevElement = newChunk.endGroupId;
+                        }
+                        else //calculations on empty chunks
+                        {
+                            newChunk.startPointId = pointID;
+                            point.prevElement = -1;
+                        }
+                        newChunk.endGroupId = pointID;
+
+                    }
+                }
+                else
+                {
+                    print("point out of bounds" + position);
+                }
+            }
+
+            pointID++;
+        }
+
+        /////////////////////////////////////////////////////////////////////////////////buffer setup
+        
+        //setting up basic variables
         chunksNum = chunksArray.Length;
         positionsNum = points.Length;
         mainKernel = physicsCom.FindKernel("pointCal");
+        preparationKernel = physicsCom.FindKernel("PrepareData");
+
         int pointStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Particle));
         int chunkStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Chunk));
-        int chunkPointDataStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(ChunkPointData));
 
         pointsTRS = new Matrix4x4[positionsNum];
 
@@ -197,19 +287,13 @@ public unsafe class physics : MonoBehaviour
         ChunksInBuffer.SetData(chunksArray);
         ChunksOutBuffer = new ComputeBuffer(chunksNum, chunkStructuresize);
 
-        chunkPointDataInBuffer = new ComputeBuffer(ChunksGroupPointers.Length, chunkPointDataStructuresize);
-        chunkPointDataInBuffer.SetData(ChunksGroupPointers);
-        chunkPointDataOutBuffer = new ComputeBuffer(ChunksGroupPointers.Length, chunkPointDataStructuresize);
-
+        
         outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 16);
 
         //seting buffers to shader
         
         physicsCom.SetBuffer(mainKernel, "ChunksOut", ChunksOutBuffer);
         physicsCom.SetBuffer(mainKernel, "ChunksIn", ChunksInBuffer);
-
-        physicsCom.SetBuffer(mainKernel, "ChunksGroupPointersIn", chunkPointDataInBuffer); 
-        physicsCom.SetBuffer(mainKernel, "ChunksGroupPointersOut", chunkPointDataOutBuffer);
 
         physicsCom.SetBuffer(mainKernel, "pointsIn", pointsInBuffer);
         physicsCom.SetBuffer(mainKernel, "pointsOut", pointsOutBuffer);
@@ -312,88 +396,10 @@ public unsafe class physics : MonoBehaviour
     };
     private int[,,] subChunkLookupTable ;
     Chunk[] chunksArray;
-    struct ChunkPointData { public fixed int points[chunkPointGroupsNum]; };
     ChunkPointData[] ChunksGroupPointers;
 
     [SerializeField]private GameObject showCube;
-    void prepareOtherData()
-    {
-        //calculating the actual chunk area becose it needs to be a some number of powesr of smallestChunkSize powerd by chunkSideDividingNum 
-        float chunkAreaCheck = smalestChunksSize;
-        int maxIteration = 0;
-        while (chunkAreaCheck < chunkArea)
-        {
-            chunkAreaCheck *= chunkSideDividingNum;
-            maxIteration++;
-        }
-        chunkArea = chunkAreaCheck;
-        //making the bigest parent chunk 
-        List<Chunk> chunks = new List<Chunk>();
 
-        Chunk chunk = new Chunk();
-        chunk.iteration = maxIteration;
-        chunk.position = Vector3.zero;
-        chunk.mass = 0;
-        chunk.numofPoints = 0;
-        chunk.size = chunkArea;
-        numOfSmalestChunks = 0;
-        chunks.Add(chunk);
-        //making all chunks insade that chunk
-        makeSubChunks(0, ref chunks);
-
-        //convering chunk list to chunk array
-        chunksArray = new Chunk[chunks.Count];
-        for (int i = 0; i < chunksArray.Length; i++)chunksArray[i] = chunks[i];
-
-         //decleration of groups of paritivles 
-        ChunksGroupPointers = new ChunkPointData[numOfSmalestChunks];// the chunks at teh lowest level point to these groups of paritivles 
-
-        //making the look up table that will be used to tell in whath inedex the chuck you want to find is in 
-        subChunkLookupTable = new int[chunkSideDividingNum, chunkSideDividingNum, chunkSideDividingNum];
-        int lookUpSetupI = 0;
-        for (int x = 0; x < chunkSideDividingNum ; x++)
-        {
-            for (int y = 0; y < chunkSideDividingNum ; y++)
-            {
-                for (int z = 0; z < chunkSideDividingNum; z ++)
-                {
-                    subChunkLookupTable[x, y, z] = lookUpSetupI;
-                    lookUpSetupI++;
-                }
-            }
-        }
-        //soritng particle in to there respective chunks
-        int pointID = 0;
-        foreach (Particle point in points)
-        {          
-            Vector3 position = point.position;
-
-            int inWhatchunk = 0;
-
-            for (int i = 0; i <= maxIteration; i++)//going repetedly to children of childer and asigning values
-            {
-                inWhatchunk = findChild(0, position, chunksArray);
-
-                if (inWhatchunk != -1)
-                {
-                    Chunk newChunk = chunks[inWhatchunk];
-                    newChunk.mass += pointMass;
-                    newChunk.numofPoints++;
-                    chunksArray[inWhatchunk] = newChunk;
-
-                    ChunkPointData newChunkPointData = ChunksGroupPointers[newChunk.pointGroupId];
-                    newChunkPointData.points[newChunk.pointGroupId] = pointID;
-                }
-                else
-                {
-                    print("point out of bounds" + position);
-                }
-            }
-
-            pointID++;
-        }
-       
-    }
     bool done = false;
     int findChild(int parentId, Vector3 position, Chunk[] chunks)//function that finds the child of a parent chunk based on position
     {

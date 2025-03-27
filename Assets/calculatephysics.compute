@@ -15,7 +15,7 @@ struct Particle
 struct Chunk
 {
     float3 position;
-    float3 AvrVelocity;
+    float3 totalVelocity;
     float mass;
     int numofPoints;
 
@@ -35,7 +35,6 @@ struct SubChunkLookupTable
 {
     int data[CHUNK_SIDE_DIVISION_NUMBER][CHUNK_SIDE_DIVISION_NUMBER][CHUNK_SIDE_DIVISION_NUMBER];
 };
-
 
 RWStructuredBuffer<SubChunkLookupTable> subChunkLookupTable;
 
@@ -62,7 +61,6 @@ bool NormalHitsSphere(float3 normal, float3 origin, float3 spherePos, float sphe
     hitPos = origin + normal * t; // Compute the intersection position
     return true;
 }
-
 
 float4x4 CreateTRSMatrix(float3 pos, float4 rot, float3 scale)
 {
@@ -103,6 +101,7 @@ float4x4 CreateTRSMatrix(float3 pos, float4 rot, float3 scale)
     // Combine Translation, Rotation, and Scaling Matrices (TRS)
     return mul(translationMatrix, mul(rotationMatrix, scaleMatrix));
 }
+
 float RandomFloat(float3 position)
 {
     // Simple hash function for pseudo-random number generation
@@ -112,17 +111,19 @@ float RandomFloat(float3 position)
     float randomValue = (float)(seed & 0x7fffffff) / 0x7fffffff; // Normalize to [0, 1]
     return randomValue;
 }
+
 float Random(float seed)
 {
     return frac(sin(seed) * 43758.5453);
 }
 
-
 float RandomRange(float seed, float min, float max)
 {
     return lerp(min, max, Random(seed));
 }
-float3 GetExitPoint(float3 origin, float3 direction, float3 sphereCenter, float sphereRadius) {
+
+float3 GetExitPoint(float3 origin, float3 direction, float3 sphereCenter, float sphereRadius) 
+{
     float3 oc = origin - sphereCenter; // Vector from sphere center to origin
     float a = dot(direction, direction);
     float b = 2.0f * dot(oc, direction);
@@ -145,7 +146,6 @@ float3 CalculateBounceDirection(float3 hitPoint, float3 lightDir, float3 sphereC
     return lightDir - 2.0 * dot(lightDir, normal) * normal;
 
 }
-
 float frameLenght;
 float GStrenght;
 float frictionStrenght;
@@ -154,9 +154,7 @@ float size;
 float pointMass;
 float framecalSpeedMul = 1;
 int chunkArea;
-
-
-
+#define chunkCalSize 20// size of chunk where engin start to claculate adicional physics (velocity dif) 
 float3 clampToHightFloat3(float3 input) {
     return clamp(input, float3(-100, -100, -100), float3(100, 100, 100));
 }
@@ -167,14 +165,12 @@ void CalculatePhysicsTwoPoints(float3 testPos,float3 testVel,float testMass , in
     //geting values for calculating 
     float disTestPos = distance(mainPos, testPos);
     
-    
     if (disTestPos > 0.00001)
     {
-
         //geting values for calculating 
         float3 dirTestPos = normalize(testPos - mainPos) ;
 
-        float3 velDif =  pointsIn[mainParticleId].velocity - testVel ;
+        float3 velDif =  pointsIn[mainParticleId].velocity - (testVel / testNumOfParticles) ;
         float velDifScale = length(velDif);
         //calculating frictionForce
         float frictionForce = (velDifScale / pow(disTestPos,1)) * frictionStrenght *(float)testNumOfParticles;
@@ -243,9 +239,12 @@ void calculatePhysicsFromChunk(int chunkId ,int mainParticleId, inout Particle c
 }
 void setPointGroups(int lastChunkId, int nextChunkId , int pointid)
 {
+    //setting up the variables
     Particle notChangedPoint = pointsOut[pointid];
+    //both chunks need to be configured for the function to end
     bool lastChunksGroupConfigured = false;
     bool nextChunksGroupConfigured = false;
+    
     while (nextChunksGroupConfigured == false || lastChunksGroupConfigured == false) // Keep looping until this thread successfully changes the value
     {
         //checking if the last chunk is curently in use if not then change the chunk group points
@@ -260,8 +259,13 @@ void setPointGroups(int lastChunkId, int nextChunkId , int pointid)
             {
                  //changing the olds points chucks - point list
                 if(notChangedPoint.prevElement!=-1) pointsOut[changedPoint.prevElement].nextElement = changedPoint.nextElement ;
-                if(notChangedPoint.nextElement!=-1) pointsOut[changedPoint.nextElement].prevElement=changedPoint.prevElement;
-
+                if(notChangedPoint.nextElement!=-1) {
+                    pointsOut[changedPoint.nextElement].prevElement=changedPoint.prevElement;
+                }else
+                {
+                    ChunksOut[lastChunkId].endGroupId = notChangedPoint.prevElement; // changing the last point in chunk list when last point is removed
+                }   
+                ChunksOut[lastChunkId].numofPoints--;
                 lastChunksGroupConfigured = true;//last chunk is configured
                 ChunksOut[lastChunkId].curentlyInUse = false;//leting other threads change the chunk
             }
@@ -291,6 +295,7 @@ void setPointGroups(int lastChunkId, int nextChunkId , int pointid)
                     pointsOut[pointid].nextElement= -1;
                     ChunksOut[newPointChunkIterationId].endGroupId = pointid;
                 }
+                ChunksOut[nextChunkId].numofPoints++;
                 nextChunksGroupConfigured = true;//last chunk is configured
                 ChunksOut[nextChunkId].curentlyInUse = false;//leting other threads change the chunk
             }
@@ -342,20 +347,33 @@ void pointCal (uint3 id : SV_DispatchThreadID)
         //writing chunk and point-list data
         int newPointChunkIterationId =0;
         int OldPointChunkIterationId = 0;
+        int iteration = ChunksIn[0].iteration;// setting iteration to the bigest posible 
 
         Particle oldPoint = pointsIn[id.x];
         while(iteration>-1)//iterating down the chunks hierarchy to update all chunks that dont mach the new position
         {
-            if (newPointChunkIterationId != OldPointChunkIterationId)
+            if(iteration != ChunksIn[0].iteration)  
             {
-                //upadatong new chunks
-                InterlockedAdd(ChunksOut[newPointChunkIterationId].numofPoints, 1);
-                InterlockedAdd(ChunksOut[newPointChunkIterationId].mass, pointMass);
-                //upadatong old chunks
-                InterlockedAdd(ChunksOut[OldPointChunkIterationId].numofPoints, -1);
-                InterlockedAdd(ChunksOut[OldPointChunkIterationId].mass, -pointMass);
-                
-            }
+                if (newPointChunkIterationId != OldPointChunkIterationId)
+                {
+                    //upadatong new chunks
+                    InterlockedAdd(ChunksOut[newPointChunkIterationId].numofPoints, 1);
+                    InterlockedAdd(ChunksOut[newPointChunkIterationId].mass, pointMass);
+                    //upadatong old chunks
+                    InterlockedAdd(ChunksOut[OldPointChunkIterationId].numofPoints, -1);
+                    InterlockedAdd(ChunksOut[OldPointChunkIterationId].mass, -pointMass);
+                    //updating small chunk velocities
+                    if(ChunksOut[newPointChunkIterationId].size < chunkCalSize)
+                    {
+                        InterlockedAdd(ChunksOut[OldPointChunkIterationId].totalVelocity, changedPoint.velocity);      
+                        InterlockedAdd(ChunksOut[newPointChunkIterationId].totalVelocity, -pointsIn[id.x].velocity);
+                    }  
+                }else if(ChunksOut[newPointChunkIterationId].size < chunkCalSize)
+                {
+                    InterlockedAdd(ChunksOut[newPointChunkIterationId].totalVelocity, changedPoint.velocity -pointsIn[id.x].velocity);
+                }          
+            }    
+            //finding the new sub-chunks id for the old point and 
             newPointChunkIterationId = findchild(newPointChunkIterationId, changedPoint.position);
             OldPointChunkIterationId = findchild(OldPointChunkIterationId, oldPoint.position);
             iteration--;
@@ -363,22 +381,20 @@ void pointCal (uint3 id : SV_DispatchThreadID)
         //changing the point list
         if (newPointChunkIterationId != OldPointChunkIterationId)
         {
-           
-            
-            
-            
-
-            
-        }
-        
-            
-
+            setPointGroups(OldPointChunkIterationId, newPointChunkIterationId, id.x);
+        }                   
     }
     
 }
-/*
+//function that prepares the data for the next frame
 [numthreads(NUM_OF_THREADS, 1, 1)]
-void PrepareChunks(uint3 id : SV_DispatchThreadID)
+void PrepareData(uint3 id : SV_DispatchThreadID)
 {   
-
-}*/
+    if (id.x < ChunksIn.Length)
+    {
+        ChunksIn[id.x] = ChunksOut[id.x];//copying the chunks data to the output buffer
+    }else if  (id.x < ChunksIn.Length+ pointsIn.length)      
+    {
+        pointsIn[id.x - ChunksIn.Length] = pointsOut[id.x - ChunksIn.Length];//copying the points data to the output buffer
+    }
+}
