@@ -5,7 +5,6 @@ using UnityEngine;
 public unsafe class physics : MonoBehaviour
 {
     [Header("Basic Setup")]
-    const int chunkPointGroupsNum = 200;
     const int chunkSideDividingNum = 2;
     [SerializeField] private ComputeShader physicsCom;
     [SerializeField] private Mesh pointMesh;
@@ -56,7 +55,7 @@ public unsafe class physics : MonoBehaviour
 
         public int iteration;
         public int parent;
-        public int children[CHUNK_SIDE_DIVISION_NUMBER * CHUNK_SIDE_DIVISION_NUMBER * CHUNK_SIDE_DIVISION_NUMBER];
+        public unsafe fixed int children[chunkSideDividingNum * chunkSideDividingNum * chunkSideDividingNum]; // Fixed-size array
         public float size;
 
         public int startPointId;
@@ -147,35 +146,28 @@ public unsafe class physics : MonoBehaviour
             physicsCom.SetFloat("NUM_OF_THREADS", NUM_OF_THREADS);
             physicsCom.SetFloat("frameLenght", Time.deltaTime);
 
-            physicsCom.SetInt("chunkCalSize", chunkCalSize);
+            physicsCom.SetFloat("chunkCalSize", chunkCalSize);
             //dispatching compute kernel
-            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 128f), 1, 1);
-            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(positionsNum / 128f), 1, 1);
+            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(pointsNum / 128f), 1, 1);
+            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt((pointsNum+chunksNum) / 128f), 1, 1);
 
             //taking data from dispach
             outMetrixTransformBuffer.GetData(pointsTRS);
             //drawing meshes
-            if (i == frameCal-1) Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, positionsNum);
+            if (i == frameCal-1) Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, pointsNum);
         }
 
         
     }
-    ComputeBuffer pointsInBuffer;
-    ComputeBuffer pointsOutBuffer;
+
     ComputeBuffer outMetrixTransformBuffer;
-    ComputeBuffer ChunksInBuffer;
-    ComputeBuffer ChunksOutBuffer;
-    ComputeBuffer chunkPointDataInBuffer;
-    ComputeBuffer chunkPointDataOutBuffer;
 
-    Matrix4x4[] pointsTRS ;
-
-    int positionsNum ;
-    int chunksNum;
-    int mainKernel;
-    int preparationKernel;
-
-
+    private Matrix4x4[] pointsTRS ;
+    private int mainKernel;
+    private int preparationKernel;
+    private int pointsNum;
+    private int chunksNum;
+    private int[,,] subChunkLookupTable;
     void generateBufferes()
     {
         ////////////////////////////////////////////////////////////////////////////////////////oher data setup
@@ -204,11 +196,15 @@ public unsafe class physics : MonoBehaviour
         makeSubChunks(0, ref chunks);
 
         //convering chunk list to chunk array
-        chunksArray = new Chunk[chunks.Count];
-        for (int i = 0; i < chunksArray.Length; i++)chunksArray[i] = chunks[i];
+        Chunk[] chunksArray = new Chunk[chunks.Count];
+
+        for (int i = 0; i < chunksArray.Length; i++)
+        {
+            chunksArray[i] = chunks[i];
+        }
 
         //making the look up table that will be used to tell in whath inedex the chuck you want to find is in 
-        subChunkLookupTable = new int[chunkSideDividingNum, chunkSideDividingNum, chunkSideDividingNum];
+        subChunkLookupTable  = new int[chunkSideDividingNum, chunkSideDividingNum, chunkSideDividingNum];
         int lookUpSetupI = 0;
         for (int x = 0; x < chunkSideDividingNum ; x++)
         {
@@ -222,16 +218,20 @@ public unsafe class physics : MonoBehaviour
             }
         }
         //soritng particle in to there respective chunks
-        int pointID = 0;
-        foreach (Particle point in points)
+        for (int i = 0; i < points.Length; i++)
         {          
+            Particle point = points[i];
             Vector3 position = point.position;
             
             int inWhatchunk = 0;
 
-            for (int i = 0; i <= maxIteration; i--)//going repetedly to children of childer and asigning values
+            while(chunksArray[inWhatchunk].iteration > 0)   //going repetedly to children of childer and asigning values
             {
-                inWhatchunk = findChild(0, position, chunksArray);
+                int iteration = chunksArray[inWhatchunk].iteration;
+
+                inWhatchunk = findChild(inWhatchunk, position, chunksArray);
+                if (inWhatchunk == -1) break;
+                iteration = chunksArray[inWhatchunk].iteration;
 
                 if (inWhatchunk != -1)
                 {
@@ -250,10 +250,10 @@ public unsafe class physics : MonoBehaviour
                         }
                         else //calculations on empty chunks
                         {
-                            newChunk.startPointId = pointID;
+                            newChunk.startPointId = i;
                             point.prevElement = -1;
                         }
-                        newChunk.endGroupId = pointID;
+                        newChunk.endGroupId = i;
 
                     }
                 }
@@ -262,33 +262,38 @@ public unsafe class physics : MonoBehaviour
                     print("point out of bounds" + position);
                 }
             }
-
-            pointID++;
         }
+        
 
         /////////////////////////////////////////////////////////////////////////////////buffer setup
         
         //setting up basic variables
+        pointsNum = points.Length;
         chunksNum = chunksArray.Length;
-        positionsNum = points.Length;
         mainKernel = physicsCom.FindKernel("pointCal");
         preparationKernel = physicsCom.FindKernel("PrepareData");
 
         int pointStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Particle));
         int chunkStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Chunk));
 
-        pointsTRS = new Matrix4x4[positionsNum];
+        pointsTRS = new Matrix4x4[pointsNum];
 
         //declearing buffers
-        pointsInBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
-        pointsOutBuffer = new ComputeBuffer(positionsNum, pointStructuresize);
+
+        ComputeBuffer ChunksInBuffer;
+        ComputeBuffer ChunksOutBuffer;
+        ComputeBuffer pointsInBuffer;
+        ComputeBuffer pointsOutBuffer;
+
+        pointsInBuffer = new ComputeBuffer(pointsNum, pointStructuresize);
+        pointsOutBuffer = new ComputeBuffer(pointsNum, pointStructuresize);
 
         ChunksInBuffer = new ComputeBuffer(chunksNum, chunkStructuresize);
         ChunksInBuffer.SetData(chunksArray);
         ChunksOutBuffer = new ComputeBuffer(chunksNum, chunkStructuresize);
 
         
-        outMetrixTransformBuffer = new ComputeBuffer(positionsNum, sizeof(float) * 16);
+        outMetrixTransformBuffer = new ComputeBuffer(pointsNum, sizeof(float) * 16);
 
         //seting buffers to shader
         
@@ -302,7 +307,7 @@ public unsafe class physics : MonoBehaviour
         //seting data to outputput buffers 
         pointsOutBuffer.SetData(points);
         ChunksOutBuffer.SetData(chunksArray);
-        chunkPointDataOutBuffer.SetData(ChunksGroupPointers);
+
         /*
         //setting data for dispach
         physicsCom.SetFloat("size", pointSize);
@@ -336,8 +341,6 @@ public unsafe class physics : MonoBehaviour
 
         // Set the buffer to the compute shader
         physicsCom.SetBuffer(mainKernel, "subChunkLookupTable", SubChunkLookupTableBuffer);
-
-
     }
     int numOfSmalestChunks = 0;
     void makeSubChunks(int chunkId, ref List<Chunk> chunks )//function that makes sub chunks insade of subchanks... until it makes all chunks needed
@@ -380,7 +383,6 @@ public unsafe class physics : MonoBehaviour
                     int subChunkId = chunks.Count -1;
                     chunk.children[i] = subChunkId;
                     if (subChunk.iteration == 0) {
-                        subChunk.pointGroupId = numOfSmalestChunks;
                         numOfSmalestChunks++;
                     }
                     makeSubChunks(subChunkId, ref chunks);
@@ -394,9 +396,6 @@ public unsafe class physics : MonoBehaviour
     {
         public fixed int data[chunkSideDividingNum*chunkSideDividingNum*chunkSideDividingNum];
     };
-    private int[,,] subChunkLookupTable ;
-    Chunk[] chunksArray;
-    ChunkPointData[] ChunksGroupPointers;
 
     [SerializeField]private GameObject showCube;
 
@@ -405,13 +404,13 @@ public unsafe class physics : MonoBehaviour
     {
         //calculations
         position -= chunks[parentId].position;
-        Vector3 calPos = position / (chunks[parentId].size / (float)chunkSideDividingNum);
-        calPos += Vector3.one * (float)chunkSideDividingNum / 2f;
+        Vector3 calPos = position / (chunks[parentId].size) +Vector3.one/2;
+        calPos = calPos* (float)chunkSideDividingNum ;
 
         //out of bounce check
         if (calPos.x < chunkSideDividingNum && calPos.y < chunkSideDividingNum && calPos.z < chunkSideDividingNum)
         {
-            return chunks[0].children[subChunkLookupTable[Mathf.FloorToInt(calPos.x), Mathf.FloorToInt(calPos.y), Mathf.FloorToInt(calPos.z)]];//returning the child
+            return chunks[parentId].children[subChunkLookupTable[Mathf.FloorToInt(calPos.x), Mathf.FloorToInt(calPos.y), Mathf.FloorToInt(calPos.z)]];//returning the child
         }
         else
         {
@@ -425,8 +424,6 @@ public unsafe class physics : MonoBehaviour
         if(spawnSpehere == true)spawnPointsSpere();
 
         if(Spawn2Points == true) spawnTwoPoints();
-
-        prepareOtherData();
 
         generateBufferes();
 
