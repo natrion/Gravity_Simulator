@@ -59,8 +59,8 @@ public unsafe class physics : MonoBehaviour
         public float size;
 
         public int startPointId;
-        public int endGroupId;
-        public bool curentlyInUse;
+        public int endPointId;
+        public int curentlyInUse;
     };
     //[SerializeField]
     private Particle[] points;
@@ -147,14 +147,30 @@ public unsafe class physics : MonoBehaviour
             physicsCom.SetFloat("frameLenght", Time.deltaTime);
 
             physicsCom.SetFloat("chunkCalSize", chunkCalSize);
-            //dispatching compute kernel
+            //dispatching compute main kernel
+            Chunk[] chunks = new Chunk[chunksNum];
+
+            pointsInBuffer.GetData(points);
+            pointsOutBuffer.GetData(points);
+            ChunksInBuffer.GetData(chunks);
+            ChunksOutBuffer.GetData(chunks);
+
             physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(pointsNum / 128f), 1, 1);
-            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt((pointsNum+chunksNum) / 128f), 1, 1);
+
+            pointsInBuffer.GetData(points);
+            pointsOutBuffer.GetData(points);
+            ChunksInBuffer.GetData(chunks);
+            ChunksOutBuffer.GetData(chunks);
+
 
             //taking data from dispach
             outMetrixTransformBuffer.GetData(pointsTRS);
             //drawing meshes
             if (i == frameCal-1) Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, pointsNum);
+
+            //dispatching compute kernel
+            physicsCom.Dispatch(preparationKernel, Mathf.CeilToInt((pointsNum+chunksNum) / 128f), 1, 1);
+
         }
 
         
@@ -168,6 +184,11 @@ public unsafe class physics : MonoBehaviour
     private int pointsNum;
     private int chunksNum;
     private int[,,] subChunkLookupTable;
+
+    ComputeBuffer ChunksInBuffer;
+    ComputeBuffer ChunksOutBuffer;
+    ComputeBuffer pointsInBuffer;
+    ComputeBuffer pointsOutBuffer;
     void generateBufferes()
     {
         ////////////////////////////////////////////////////////////////////////////////////////oher data setup
@@ -235,7 +256,7 @@ public unsafe class physics : MonoBehaviour
 
                 if (inWhatchunk != -1)
                 {
-                    Chunk newChunk = chunks[inWhatchunk];
+                    Chunk newChunk = chunksArray[inWhatchunk];
                     newChunk.mass += pointMass;
                     newChunk.numofPoints++;
                     newChunk.totalVelocity += point.velocity;
@@ -246,22 +267,24 @@ public unsafe class physics : MonoBehaviour
                         point.nextElement = -1;
                         if (newChunk.numofPoints > 1)//calculations on not emty chunks
                         {
-                           point.prevElement = newChunk.endGroupId;
+                           point.prevElement = newChunk.endPointId;
                         }
                         else //calculations on empty chunks
                         {
                             newChunk.startPointId = i;
                             point.prevElement = -1;
                         }
-                        newChunk.endGroupId = i;
+                        newChunk.endPointId = i;
 
                     }
+                    chunksArray[inWhatchunk] = newChunk;
                 }
                 else
                 {
                     print("point out of bounds" + position);
                 }
             }
+            points[i] = point;
         }
         
 
@@ -279,35 +302,35 @@ public unsafe class physics : MonoBehaviour
         pointsTRS = new Matrix4x4[pointsNum];
 
         //declearing buffers
-
+        /*
         ComputeBuffer ChunksInBuffer;
         ComputeBuffer ChunksOutBuffer;
         ComputeBuffer pointsInBuffer;
-        ComputeBuffer pointsOutBuffer;
+        ComputeBuffer pointsOutBuffer;*/
 
         pointsInBuffer = new ComputeBuffer(pointsNum, pointStructuresize);
+        pointsInBuffer.SetData(points);
         pointsOutBuffer = new ComputeBuffer(pointsNum, pointStructuresize);
+        pointsOutBuffer.SetData(points);
 
         ChunksInBuffer = new ComputeBuffer(chunksNum, chunkStructuresize);
         ChunksInBuffer.SetData(chunksArray);
         ChunksOutBuffer = new ComputeBuffer(chunksNum, chunkStructuresize);
-
+        ChunksOutBuffer.SetData(chunksArray);
         
         outMetrixTransformBuffer = new ComputeBuffer(pointsNum, sizeof(float) * 16);
 
-        //seting buffers to shader
-        
+        //seting buffers to main kernel
         physicsCom.SetBuffer(mainKernel, "ChunksOut", ChunksOutBuffer);
         physicsCom.SetBuffer(mainKernel, "ChunksIn", ChunksInBuffer);
-
         physicsCom.SetBuffer(mainKernel, "pointsIn", pointsInBuffer);
         physicsCom.SetBuffer(mainKernel, "pointsOut", pointsOutBuffer);
-
         physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
-        //seting data to outputput buffers 
-        pointsOutBuffer.SetData(points);
-        ChunksOutBuffer.SetData(chunksArray);
-
+        //setting bufers to preparation kernel
+        physicsCom.SetBuffer(preparationKernel, "ChunksOut", ChunksOutBuffer);
+        physicsCom.SetBuffer(preparationKernel, "ChunksIn", ChunksInBuffer);
+        physicsCom.SetBuffer(preparationKernel, "pointsIn", pointsInBuffer);
+        physicsCom.SetBuffer(preparationKernel, "pointsOut", pointsOutBuffer);
         /*
         //setting data for dispach
         physicsCom.SetFloat("size", pointSize);
@@ -319,7 +342,6 @@ public unsafe class physics : MonoBehaviour
         */
 
         //puting subchunk lookup table to shader
-       
         int flatSize = chunkSideDividingNum * chunkSideDividingNum * chunkSideDividingNum;
         SubChunkLookupTableStructure lookupTable = new SubChunkLookupTableStructure();
 
@@ -384,6 +406,7 @@ public unsafe class physics : MonoBehaviour
                     chunk.children[i] = subChunkId;
                     if (subChunk.iteration == 0) {
                         numOfSmalestChunks++;
+                        subChunk.curentlyInUse = 0;
                     }
                     makeSubChunks(subChunkId, ref chunks);
                     i++;
@@ -427,6 +450,7 @@ public unsafe class physics : MonoBehaviour
 
         generateBufferes();
 
+        //visualizatePositions();
         done = true;
     }
     void Update()
