@@ -5,14 +5,17 @@ using UnityEngine;
 public unsafe class physics : MonoBehaviour
 {
     [Header("Basic Setup")]
-    const int chunkSideDividingNum = 2;
+    const int chunkSideDividingNum = 4;//number of chunks in one side of the chunk
+
     [SerializeField] private ComputeShader physicsCom;
     [SerializeField] private Mesh pointMesh;
     [SerializeField] private Material pointMaterial;
     [SerializeField] private  int NUM_OF_THREADS = 256;
     [SerializeField]  private float smalestChunksSize = 5;
     [SerializeField] private float chunkArea = 1000;
-    [SerializeField] private float chunkCalSize = 20;
+    [SerializeField] private float DECIMALVALUESININT = 10000f;
+    [SerializeField] private float chunkAddicionalCalSize =20f;//maximal size of chunk that has adicional calculations liek tolal veloctity 
+
     [Header("Spawning Points Sphere")]
     [SerializeField] private bool spawnSpehere;
     [SerializeField] private int spawnAmount = 20;
@@ -35,7 +38,8 @@ public unsafe class physics : MonoBehaviour
     [SerializeField] private int frameCal = 1;
     [Range(0f, 5f)]
     [SerializeField] private float framecalSpeedMul = 1;
-    //[System.Serializable]
+
+    [System.Serializable]
     struct Particle
     {
         public Vector3 position;
@@ -45,12 +49,16 @@ public unsafe class physics : MonoBehaviour
         public int prevElement;
         public int chunkId;
     };
-    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    [SerializeField] private Particle[] points ;
+    [SerializeField] Chunk[] chunks ;
+
+
+    [System.Serializable]
     struct Chunk
     {
         public Vector3 position;
-        public Vector3 totalVelocity;
-        public float mass;
+        public Vector3Int totalVelocity;
+        public int mass;
         public int numofPoints;
 
         public int iteration;
@@ -62,8 +70,7 @@ public unsafe class physics : MonoBehaviour
         public int endPointId;
         public int curentlyInUse;
     };
-    //[SerializeField]
-    private Particle[] points;
+
 
     Vector3 EulerToNormal(Vector3 eulerAngles)
     {
@@ -146,22 +153,17 @@ public unsafe class physics : MonoBehaviour
             physicsCom.SetFloat("NUM_OF_THREADS", NUM_OF_THREADS);
             physicsCom.SetFloat("frameLenght", Time.deltaTime);
 
-            physicsCom.SetFloat("chunkCalSize", chunkCalSize);
+            physicsCom.SetFloat("chunkAddicionalCalSize", chunkAddicionalCalSize);
+            physicsCom.SetFloat("DECIMALVALUESININT", DECIMALVALUESININT);
+            physicsCom.SetFloat("CHUNK_SIDE_DIVISION_NUMBER", chunkSideDividingNum);
+            
+            pointsOutBuffer.GetData(points);
+            ChunksOutBuffer.GetData(chunks);
             //dispatching compute main kernel
-            Chunk[] chunks = new Chunk[chunksNum];
+            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(pointsNum /(float)NUM_OF_THREADS), 1, 1);
 
-            pointsInBuffer.GetData(points);
             pointsOutBuffer.GetData(points);
-            ChunksInBuffer.GetData(chunks);
             ChunksOutBuffer.GetData(chunks);
-
-            physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(pointsNum / 128f), 1, 1);
-
-            pointsInBuffer.GetData(points);
-            pointsOutBuffer.GetData(points);
-            ChunksInBuffer.GetData(chunks);
-            ChunksOutBuffer.GetData(chunks);
-
 
             //taking data from dispach
             outMetrixTransformBuffer.GetData(pointsTRS);
@@ -169,7 +171,9 @@ public unsafe class physics : MonoBehaviour
             if (i == frameCal-1) Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, pointsNum);
 
             //dispatching compute kernel
-            physicsCom.Dispatch(preparationKernel, Mathf.CeilToInt((pointsNum+chunksNum) / 128f), 1, 1);
+            physicsCom.Dispatch(preparationKernel, Mathf.CeilToInt((pointsNum+chunksNum) / (float)NUM_OF_THREADS), 1, 1);
+
+      
 
         }
 
@@ -257,9 +261,9 @@ public unsafe class physics : MonoBehaviour
                 if (inWhatchunk != -1)
                 {
                     Chunk newChunk = chunksArray[inWhatchunk];
-                    newChunk.mass += pointMass;
+                    newChunk.mass += Mathf.RoundToInt(pointMass * DECIMALVALUESININT);
                     newChunk.numofPoints++;
-                    newChunk.totalVelocity += point.velocity;
+                    if(newChunk.size<chunkAddicionalCalSize )newChunk.totalVelocity += new Vector3Int(Mathf.RoundToInt(point.velocity.x* DECIMALVALUESININT) , Mathf.RoundToInt(point.velocity.y* DECIMALVALUESININT), Mathf.RoundToInt(point.velocity.z* DECIMALVALUESININT));
 
                     if (newChunk.iteration == 0)// calculationg data for points in smallest chunks
                     {
@@ -450,7 +454,7 @@ public unsafe class physics : MonoBehaviour
 
         generateBufferes();
 
-        //visualizatePositions();
+        chunks = new Chunk[chunksNum];
         done = true;
     }
     void Update()
