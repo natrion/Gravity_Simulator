@@ -156,9 +156,10 @@ MonoBehaviour:
   pointMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   pointMaterial: {fileID: 2100000, guid: c3de0fc030849674abc4131995ee2c53, type: 2}
   NUM_OF_THREADS: 1028
-  smalestChunksSize: 5
-  chunkArea: 10
-  chunkCalSize: 20
+  smalestChunksSize: 1
+  chunkArea: 4
+  DECIMALVALUESININT: 10000
+  chunkAddicionalCalSize: 20
   spawnSpehere: 1
   spawnAmount: 20
   SpacePerAmount: 2

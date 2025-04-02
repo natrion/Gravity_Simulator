@@ -10,7 +10,7 @@ struct Particle
     int prevElement;
     int chunkId;
 };
-#define CHUNK_SIDE_DIVISION_NUMBER 2
+#define CHUNK_SIDE_DIVISION_NUMBER 2//number of chunks in one side of the chunk (change in c# too)
 
 #define DECIMALVALUESININT 10000
 struct Chunk
@@ -382,12 +382,13 @@ void pointCal (uint3 id : SV_DispatchThreadID)
     {
         Particle changedPoint = pointsIn[id.x];//create a new point to change during this function 
 
-        float chunkArea = ChunksIn[0].size * 0.5f; // Define the chunk area based on the size of the first chunk
+        float chunkArea = ChunksOut[0].size * 0.45; // Define the chunk area based on the size of the first chunk
         //out of bounce check
-        if (abs(changedPoint.position.x)>chunkArea*0.9|| abs(changedPoint.position.y)>chunkArea*0.9 || abs(changedPoint.position.z)>chunkArea*0.9)
+        
+        if (abs(changedPoint.position.x)>chunkArea|| abs(changedPoint.position.y)>chunkArea || abs(changedPoint.position.z)>chunkArea)
         {
             changedPoint.velocity = float3(0,0,0);//pointsIn[id.x].velocity*-1;
-            changedPoint.position = clamp(pointsIn[id.x].position,float3(-chunkArea*0.9,-chunkArea*0.9,-chunkArea*0.9),float3(chunkArea*0.9,chunkArea*0.9,chunkArea*0.9 )); 
+            changedPoint.position = clamp(pointsIn[id.x].position,float3(-chunkArea,-chunkArea,-chunkArea),float3(chunkArea,chunkArea,chunkArea )); 
         }
 
         //going thrue all points to calculate forces
@@ -407,7 +408,7 @@ void pointCal (uint3 id : SV_DispatchThreadID)
         
         //writing chunk and point-list data
 
-
+        
         int newPointChunkIterationId =0;
         int OldPointChunkIterationId = 0;
         int iteration = ChunksIn[0].iteration;// setting iteration to the bigest posible 
