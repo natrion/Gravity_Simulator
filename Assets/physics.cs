@@ -14,6 +14,7 @@ public unsafe class physics : MonoBehaviour
     [SerializeField]  private float smalestChunksSize = 5;
     [SerializeField] private float chunkArea = 1000;
     [SerializeField] private float DECIMALVALUESININT = 10000f;
+    [SerializeField] private float chunkCalSize =0.6f;//maximal size of chunk that has adicional calculations liek tolal veloctity 
     [SerializeField] private float chunkAddicionalCalSize =20f;//maximal size of chunk that has adicional calculations liek tolal veloctity 
 
     [Header("Spawning Points Sphere")]
@@ -153,8 +154,10 @@ public unsafe class physics : MonoBehaviour
             physicsCom.SetFloat("NUM_OF_THREADS", NUM_OF_THREADS);
             physicsCom.SetFloat("frameLenght", Time.deltaTime);
 
+            physicsCom.SetFloat("chunkCalSize", chunkCalSize);
             physicsCom.SetFloat("chunkAddicionalCalSize", chunkAddicionalCalSize);
             physicsCom.SetFloat("DECIMALVALUESININT", DECIMALVALUESININT);
+
             
             pointsOutBuffer.GetData(points);
             ChunksOutBuffer.GetData(chunks);
