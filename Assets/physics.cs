@@ -41,6 +41,14 @@ public unsafe class physics : MonoBehaviour
     [SerializeField] private float framecalSpeedMul = 1;
 
     [System.Serializable]
+    struct DebugData
+    {
+        public int index;
+        public unsafe fixed float data[20];
+    };
+    [SerializeField] private DebugData[] debugData;
+
+    [System.Serializable]
     struct Particle
     {
         public Vector3 position;
@@ -162,12 +170,18 @@ public unsafe class physics : MonoBehaviour
             pointsOutBuffer.GetData(points);
             ChunksOutBuffer.GetData(chunks);
             //dispatching compute main kernel
+            debugDataBuffer.SetData(new DebugData[pointsNum]);
             physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(pointsNum /(float)NUM_OF_THREADS), 1, 1);
 
             pointsOutBuffer.GetData(points);
             ChunksOutBuffer.GetData(chunks);
 
-            //taking data from dispach
+            //taking test data
+            
+            
+            debugDataBuffer.GetData(debugData);
+
+            // Taking data from dispatch
             outMetrixTransformBuffer.GetData(pointsTRS);
             //drawing meshes
             if (i == frameCal-1) Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, pointsNum);
@@ -176,7 +190,7 @@ public unsafe class physics : MonoBehaviour
             physicsCom.Dispatch(preparationKernel, Mathf.CeilToInt((pointsNum+chunksNum) / (float)NUM_OF_THREADS), 1, 1);
         }
     }
-
+    ComputeBuffer debugDataBuffer;
     ComputeBuffer outMetrixTransformBuffer;
 
     private Matrix4x4[] pointsTRS ;
@@ -312,7 +326,8 @@ public unsafe class physics : MonoBehaviour
         ComputeBuffer pointsInBuffer;
         ComputeBuffer pointsOutBuffer;*/
 
-
+        debugDataBuffer = new ComputeBuffer(pointsNum, System.Runtime.InteropServices.Marshal.SizeOf(typeof(DebugData)));
+        debugDataBuffer.SetData(new DebugData[pointsNum]);
         pointsInBuffer = new ComputeBuffer(pointsNum, pointStructuresize);
         pointsInBuffer.SetData(points);
         pointsOutBuffer = new ComputeBuffer(pointsNum, pointStructuresize);
@@ -331,6 +346,8 @@ public unsafe class physics : MonoBehaviour
         physicsCom.SetBuffer(mainKernel, "pointsIn", pointsInBuffer);
         physicsCom.SetBuffer(mainKernel, "pointsOut", pointsOutBuffer);
         physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
+        physicsCom.SetBuffer(mainKernel, "debugData", debugDataBuffer);
+
         //setting bufers to preparation kernel
         physicsCom.SetBuffer(preparationKernel, "ChunksOut", ChunksOutBuffer);
         physicsCom.SetBuffer(preparationKernel, "ChunksIn", ChunksInBuffer);
@@ -459,6 +476,7 @@ public unsafe class physics : MonoBehaviour
         generateBufferes();
 
         chunks = new Chunk[chunksNum];
+        debugData = new DebugData[pointsNum];
         done = true;
     }
     void Update()
