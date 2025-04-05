@@ -1,11 +1,13 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
+using System.Threading.Tasks;
 
 public unsafe class physics : MonoBehaviour
 {
     [Header("Basic Setup")]
-    const int chunkSideDividingNum = 2;//number of chunks in one side of the chunk (change in compute shader too)
+    const int chunkSideDividingNum = 4;//number of chunks in one side of the chunk (change in compute shader too)
 
     [SerializeField] private ComputeShader physicsCom;
     [SerializeField] private Mesh pointMesh;
@@ -37,7 +39,7 @@ public unsafe class physics : MonoBehaviour
     [Header("simulation")]
 
     [SerializeField] private int frameCal = 1;
-    [Range(0f, 5f)]
+    [Range(0f, 100f)]
     [SerializeField] private float framecalSpeedMul = 1;
 
     [System.Serializable]
@@ -165,29 +167,38 @@ public unsafe class physics : MonoBehaviour
             physicsCom.SetFloat("chunkCalSize", chunkCalSize);
             physicsCom.SetFloat("chunkAddicionalCalSize", chunkAddicionalCalSize);
             physicsCom.SetFloat("DECIMALVALUESININT", DECIMALVALUESININT);
-
-            
+           
+           //testing if data is in the right chunks
             pointsOutBuffer.GetData(points);
-            ChunksOutBuffer.GetData(chunks);
+            ChunksInBuffer.GetData(chunks);
+
+            bool allGood =findIfpointsDataPlacedWellInChunks(chunks, points);
+            if (allGood == false)
+            {
+                Debug.LogError("points data is not in the right chunks");
+            }else Debug.Log("points data is in the right chunks");
+            int[] dummyData = new int[1];
             //dispatching compute main kernel
             debugDataBuffer.SetData(new DebugData[pointsNum]);
             physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(pointsNum /(float)NUM_OF_THREADS), 1, 1);
-
+            //waiting for kernel to finish this works becose the kenrnel needs before the buffer can read
+            dummyBuffer.GetData(dummyData);
             pointsOutBuffer.GetData(points);
-            ChunksOutBuffer.GetData(chunks);
-
+            ChunksInBuffer.GetData(chunks);
             //taking test data
-            
-            
+        
             debugDataBuffer.GetData(debugData);
-
+            
             // Taking data from dispatch
+            
             outMetrixTransformBuffer.GetData(pointsTRS);
             //drawing meshes
             if (i == frameCal-1) Graphics.DrawMeshInstanced(pointMesh, 0, pointMaterial, pointsTRS, pointsNum);
 
             //dispatching compute kernel
             physicsCom.Dispatch(preparationKernel, Mathf.CeilToInt((pointsNum+chunksNum) / (float)NUM_OF_THREADS), 1, 1);
+            //waiting for kernel to finish this works becose the kenrnel needs before the buffer can read
+            dummyBuffer.GetData(dummyData);
         }
     }
     ComputeBuffer debugDataBuffer;
@@ -200,6 +211,7 @@ public unsafe class physics : MonoBehaviour
     private int chunksNum;
     private int[,,] subChunkLookupTable;
 
+    ComputeBuffer dummyBuffer;
     ComputeBuffer ChunksInBuffer;
     ComputeBuffer ChunksOutBuffer;
     ComputeBuffer pointsInBuffer;
@@ -257,9 +269,9 @@ public unsafe class physics : MonoBehaviour
         for (int i = 0; i < points.Length; i++)
         {          
             Particle point = points[i];
-            point.position = new Vector3(Mathf.Clamp( point.position.x,-chunkArea*0.45f,chunkArea*0.45f)  
-                                        ,Mathf.Clamp( point.position.y,-chunkArea*0.45f,chunkArea*0.45f),
-                                        Mathf.Clamp( point.position.z,-chunkArea*0.45f,chunkArea*0.45f));
+            point.position = new Vector3(Mathf.Clamp( point.position.x,-chunkArea*0.48f,chunkArea*0.48f)  
+                                        ,Mathf.Clamp( point.position.y,-chunkArea*0.48f,chunkArea*0.48f),
+                                        Mathf.Clamp( point.position.z,-chunkArea*0.48f,chunkArea*0.48f));
             Vector3 position = point.position;
             
             int inWhatchunk = 0;
@@ -276,15 +288,16 @@ public unsafe class physics : MonoBehaviour
                 {
                     Chunk newChunk = chunksArray[inWhatchunk];
                     newChunk.mass += Mathf.RoundToInt(pointMass * DECIMALVALUESININT);
-                    newChunk.numofPoints++;
                     if(newChunk.size<chunkAddicionalCalSize )newChunk.totalVelocity += new Vector3Int(Mathf.RoundToInt(point.velocity.x* DECIMALVALUESININT) , Mathf.RoundToInt(point.velocity.y* DECIMALVALUESININT), Mathf.RoundToInt(point.velocity.z* DECIMALVALUESININT));
 
                     if (newChunk.iteration == 0)// calculationg data for points in smallest chunks
                     {
+                        newChunk.numofPoints++;
                         point.chunkId = inWhatchunk;
                         point.nextElement = -1;
                         if (newChunk.numofPoints > 1)//calculations on not emty chunks
                         {
+                           points[newChunk.endPointId].nextElement = i;
                            point.prevElement = newChunk.endPointId;
                         }
                         else //calculations on empty chunks
@@ -315,7 +328,7 @@ public unsafe class physics : MonoBehaviour
         preparationKernel = physicsCom.FindKernel("PrepareData");
 
         int pointStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Particle));
-        int chunkStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(chunksArray[0]);
+        int chunkStructuresize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Chunk));
 
         pointsTRS = new Matrix4x4[pointsNum];
 
@@ -325,9 +338,12 @@ public unsafe class physics : MonoBehaviour
         ComputeBuffer ChunksOutBuffer;
         ComputeBuffer pointsInBuffer;
         ComputeBuffer pointsOutBuffer;*/
+        dummyBuffer = new ComputeBuffer(1, sizeof(int) );
+        dummyBuffer.SetData(new int[1]{1});
 
         debugDataBuffer = new ComputeBuffer(pointsNum, System.Runtime.InteropServices.Marshal.SizeOf(typeof(DebugData)));
         debugDataBuffer.SetData(new DebugData[pointsNum]);
+
         pointsInBuffer = new ComputeBuffer(pointsNum, pointStructuresize);
         pointsInBuffer.SetData(points);
         pointsOutBuffer = new ComputeBuffer(pointsNum, pointStructuresize);
@@ -340,6 +356,8 @@ public unsafe class physics : MonoBehaviour
         
         outMetrixTransformBuffer = new ComputeBuffer(pointsNum, sizeof(float) * 16);
 
+
+
         //seting buffers to main kernel
         physicsCom.SetBuffer(mainKernel, "ChunksOut", ChunksOutBuffer);
         physicsCom.SetBuffer(mainKernel, "ChunksIn", ChunksInBuffer);
@@ -348,11 +366,16 @@ public unsafe class physics : MonoBehaviour
         physicsCom.SetBuffer(mainKernel, "MetrixTransforms", outMetrixTransformBuffer);
         physicsCom.SetBuffer(mainKernel, "debugData", debugDataBuffer);
 
+        physicsCom.SetBuffer(mainKernel, "dummyBuffer", dummyBuffer);
+
         //setting bufers to preparation kernel
         physicsCom.SetBuffer(preparationKernel, "ChunksOut", ChunksOutBuffer);
         physicsCom.SetBuffer(preparationKernel, "ChunksIn", ChunksInBuffer);
         physicsCom.SetBuffer(preparationKernel, "pointsIn", pointsInBuffer);
         physicsCom.SetBuffer(preparationKernel, "pointsOut", pointsOutBuffer);
+        
+        physicsCom.SetBuffer(preparationKernel, "dummyBuffer", dummyBuffer);
+
         
         //setting data for dispach
         /*
@@ -479,8 +502,68 @@ public unsafe class physics : MonoBehaviour
         debugData = new DebugData[pointsNum];
         done = true;
     }
+    bool findIfpointsDataPlacedWellInChunks(Chunk[] chunks, Particle[] points )
+    {
+        bool isOk = true;
+        
+        //checking every point if it is in the right chunk
+        for (int pointid = 0; pointid < points.Length; pointid++)
+        {
+            int chunkId = 0;  
+            for (int iretation = 0; iretation < chunks[0].iteration; iretation++)
+            {
+                chunkId = findChild(chunkId, points[pointid].position, chunks);
+            }
+            //checking if chunk has the point in its structure
+            int  pointInChunkId = chunks[chunkId].startPointId;
+
+            bool pointFound = false;
+            for (int i = 0; i < chunks[chunkId].numofPoints; i++)
+            {
+                if (pointInChunkId == -1){
+                    Debug.Log("chunk " + chunkId + "does not have the point " + pointid );
+                    isOk = false;
+                    break;
+                } 
+                
+                if (pointInChunkId == pointid)
+                {
+                    pointFound = true;
+                    break;
+                }
+                pointInChunkId = points[pointInChunkId].nextElement;
+                
+            }
+            if (pointFound == false)
+            {
+                Debug.Log("chunk " + chunkId + "does not have the point " + pointid );
+                isOk = false;
+            }
+            //checking if the point is in the right chunk
+
+            if (chunkId != points[pointid].chunkId)
+            {
+                Debug.Log("point " + pointid + "does have the wrong chunk in its structure" + points[pointid].chunkId + " should be in " + chunkId);
+                isOk = false;
+            }
+        }
+        //check if no numOFPoints or mass is negative
+        int ichunk= 0;
+        foreach (Chunk chunk in chunks)
+        {
+            if (chunk.numofPoints < 0 || chunk.mass < 0)
+            {
+                Debug.Log("chunk " +ichunk  + " has negative numOfPoints or mass" + chunk.numofPoints + " " + chunk.mass);
+                isOk = false;
+            }
+            ichunk++;
+        }
+        return isOk;
+    }
+
     void Update()
     {
-        if(done == true)visualizatePositions();
+        if(done == true) visualizatePositions();
     }
+
 }

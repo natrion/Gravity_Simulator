@@ -155,8 +155,8 @@ MonoBehaviour:
   physicsCom: {fileID: 7200000, guid: 385bea974c5300e4fa24e86e52b5d849, type: 3}
   pointMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   pointMaterial: {fileID: 2100000, guid: c3de0fc030849674abc4131995ee2c53, type: 2}
-  NUM_OF_THREADS: 1028
-  smalestChunksSize: 10
+  NUM_OF_THREADS: 96
+  smalestChunksSize: 1
   chunkArea: 20
   DECIMALVALUESININT: 10000
   chunkCalSize: 100
@@ -176,6 +176,7 @@ MonoBehaviour:
   GStrenght: 0.03
   frameCal: 1
   framecalSpeedMul: 5
+  debugData: []
   points: []
   chunks: []
   showCube: {fileID: 1796158178627199044, guid: bd4a2df63ee6ae644b09d303dbcd8559, type: 3}
