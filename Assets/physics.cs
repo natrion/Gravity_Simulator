@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 public unsafe class physics : MonoBehaviour
 {
     [Header("Basic Setup")]
-    const int chunkSideDividingNum = 4;//number of chunks in one side of the chunk (change in compute shader too)
+    const int chunkSideDividingNum = 6;//number of chunks in one side of the chunk (change in compute shader too)
 
     [SerializeField] private ComputeShader physicsCom;
     [SerializeField] private Mesh pointMesh;
@@ -17,7 +17,6 @@ public unsafe class physics : MonoBehaviour
     [SerializeField] private float chunkArea = 1000;
     [SerializeField] private float DECIMALVALUESININT = 10000f;
     [SerializeField] private float chunkCalSize =0.6f;//maximal size of chunk that has adicional calculations liek tolal veloctity 
-    [SerializeField] private float chunkAddicionalCalSize =20f;//maximal size of chunk that has adicional calculations liek tolal veloctity 
 
     [Header("Spawning Points Sphere")]
     [SerializeField] private bool spawnSpehere;
@@ -42,7 +41,7 @@ public unsafe class physics : MonoBehaviour
     [Range(0f, 100f)]
     [SerializeField] private float framecalSpeedMul = 1;
 
-    [System.Serializable]
+    //[System.Serializable]
     struct DebugData
     {
         public int index;
@@ -50,7 +49,7 @@ public unsafe class physics : MonoBehaviour
     };
     [SerializeField] private DebugData[] debugData;
 
-    [System.Serializable]
+    //[System.Serializable]
     struct Particle
     {
         public Vector3 position;
@@ -60,15 +59,17 @@ public unsafe class physics : MonoBehaviour
         public int prevElement;
         public int chunkId;
     };
-    [SerializeField] private Particle[] points ;
-    [SerializeField] Chunk[] chunks ;
+    
+    //[SerializeField] 
+    private Particle[] points ;
+    //[SerializeField] 
+    private Chunk[] chunks ;
 
 
     [System.Serializable]
     struct Chunk
     {
         public Vector3 position;
-        public Vector3Int totalVelocity;
         public int mass;
         public int numofPoints;
 
@@ -111,11 +112,12 @@ public unsafe class physics : MonoBehaviour
         List<Particle> pointsList = new List<Particle>();
         float sideLenght = perlinCubeLenghtPerPoint * (float)sideNum;
         Vector3 seed = new Vector3(Random.RandomRange(-10000, 10000), Random.RandomRange(-10000, 10000), Random.RandomRange(-10000, 10000));
-        for (float x = 0; x < sideLenght; x+= perlinCubeLenghtPerPoint)
+        
+        for (float x = sideLenght /-2; x < sideLenght/2; x+= perlinCubeLenghtPerPoint)
         {
-            for (float y = 0; y < sideLenght; y+= perlinCubeLenghtPerPoint)
+            for (float y = sideLenght /-2; y < sideLenght/2; y+= perlinCubeLenghtPerPoint)
             {
-                for (float z = 0; z < sideLenght; z+= perlinCubeLenghtPerPoint)
+                for (float z = sideLenght /-2; z < sideLenght/2; z+= perlinCubeLenghtPerPoint)
                 {
                     Vector3 pos = new Vector3(x, y, z);
                     float perNum = perlinNoise.get3DPerlinNoise(pos+ seed, perlinFreqency);
@@ -165,29 +167,28 @@ public unsafe class physics : MonoBehaviour
             physicsCom.SetFloat("frameLenght", Time.deltaTime);
 
             physicsCom.SetFloat("chunkCalSize", chunkCalSize);
-            physicsCom.SetFloat("chunkAddicionalCalSize", chunkAddicionalCalSize);
             physicsCom.SetFloat("DECIMALVALUESININT", DECIMALVALUESININT);
            
            //testing if data is in the right chunks
-            pointsOutBuffer.GetData(points);
-            ChunksInBuffer.GetData(chunks);
-
+            //pointsOutBuffer.GetData(points);
+            //ChunksInBuffer.GetData(chunks);
+            /*
             bool allGood =findIfpointsDataPlacedWellInChunks(chunks, points);
             if (allGood == false)
             {
                 Debug.LogError("points data is not in the right chunks");
-            }else Debug.Log("points data is in the right chunks");
+            }else Debug.Log("points data is in the right chunks");*/
             int[] dummyData = new int[1];
             //dispatching compute main kernel
-            debugDataBuffer.SetData(new DebugData[pointsNum]);
+
+            //debugDataBuffer.SetData(new DebugData[pointsNum]);
+
             physicsCom.Dispatch(mainKernel, Mathf.CeilToInt(pointsNum /(float)NUM_OF_THREADS), 1, 1);
             //waiting for kernel to finish this works becose the kenrnel needs before the buffer can read
             dummyBuffer.GetData(dummyData);
-            pointsOutBuffer.GetData(points);
-            ChunksInBuffer.GetData(chunks);
             //taking test data
         
-            debugDataBuffer.GetData(debugData);
+            //debugDataBuffer.GetData(debugData);
             
             // Taking data from dispatch
             
@@ -219,7 +220,22 @@ public unsafe class physics : MonoBehaviour
     void generateBufferes()
     {
         ////////////////////////////////////////////////////////////////////////////////////////oher data setup
-        
+        if (points == null )
+        {
+            Debug.LogError("choose the point spawning method in the inspector");
+            return;
+        }
+        /*
+        //calculating the chunk area based on the farthest point from the center of the world
+        foreach(Particle point in points)
+        {
+            float MaxDis = Mathf.Max(Mathf.Abs(point.position.x), Mathf.Max(Mathf.Abs(point.position.y), Mathf.Abs(point.position.z)));
+
+            if(MaxDis*2 > chunkArea)// *2 becose the ceter of the chunk is at 0 so if point is 50 far chunk needs to be 100 big
+            {
+                chunkArea = MaxDis*2;
+            }
+        }*/
         //calculating the actual chunk area becose it needs to be a some number of powesr of smallestChunkSize powerd by chunkSideDividingNum 
         float chunkAreaCheck = smalestChunksSize;
         int maxIteration = 0;
@@ -288,11 +304,9 @@ public unsafe class physics : MonoBehaviour
                 {
                     Chunk newChunk = chunksArray[inWhatchunk];
                     newChunk.mass += Mathf.RoundToInt(pointMass * DECIMALVALUESININT);
-                    if(newChunk.size<chunkAddicionalCalSize )newChunk.totalVelocity += new Vector3Int(Mathf.RoundToInt(point.velocity.x* DECIMALVALUESININT) , Mathf.RoundToInt(point.velocity.y* DECIMALVALUESININT), Mathf.RoundToInt(point.velocity.z* DECIMALVALUESININT));
-
+                    newChunk.numofPoints += 1;
                     if (newChunk.iteration == 0)// calculationg data for points in smallest chunks
                     {
-                        newChunk.numofPoints++;
                         point.chunkId = inWhatchunk;
                         point.nextElement = -1;
                         if (newChunk.numofPoints > 1)//calculations on not emty chunks
@@ -409,6 +423,9 @@ public unsafe class physics : MonoBehaviour
 
         // Set the buffer to the compute shader
         physicsCom.SetBuffer(mainKernel, "subChunkLookupTable", SubChunkLookupTableBuffer);
+
+        done = true;
+
     }
     int numOfSmalestChunks = 0;
     void makeSubChunks(int chunkId, ref List<Chunk> chunks )//function that makes sub chunks insade of subchanks... until it makes all chunks needed
@@ -486,23 +503,7 @@ public unsafe class physics : MonoBehaviour
             return -1;//out of bounce exeption
         }
     }
-    void Start()
-    {
-        physicsCom.SetInt("CHUNK_SIDE_DIVISION_NUMBER", chunkSideDividingNum);
-
-        if(spawnPerCube == true) SpawnPelinCube();
-
-        if(spawnSpehere == true)spawnPointsSpere();
-
-        if(Spawn2Points == true) spawnTwoPoints();
-
-        generateBufferes();
-
-        chunks = new Chunk[chunksNum];
-        debugData = new DebugData[pointsNum];
-        done = true;
-    }
-    bool findIfpointsDataPlacedWellInChunks(Chunk[] chunks, Particle[] points )
+     bool findIfpointsDataPlacedWellInChunks(Chunk[] chunks, Particle[] points )
     {
         bool isOk = true;
         
@@ -559,6 +560,21 @@ public unsafe class physics : MonoBehaviour
             ichunk++;
         }
         return isOk;
+    }
+    void Start()
+    {
+        physicsCom.SetInt("CHUNK_SIDE_DIVISION_NUMBER", chunkSideDividingNum);
+
+        if(spawnPerCube == true) SpawnPelinCube();
+
+        if(spawnSpehere == true)spawnPointsSpere();
+
+        if(Spawn2Points == true) spawnTwoPoints();
+
+        generateBufferes();
+
+        //chunks = new Chunk[chunksNum];
+        //debugData = new DebugData[pointsNum];
     }
 
     void Update()
